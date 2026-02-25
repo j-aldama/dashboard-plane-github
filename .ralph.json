@@ -1,0 +1,81 @@
+{
+  "project": {
+    "name": "dashboardRalph",
+    "identifier": "DASH"
+  },
+
+  "git": {
+    "defaultBranch": "main",
+    "stagingBranch": "develop",
+    "branchPrefix": "agent/",
+    "autoCommit": true,
+    "prTarget": "develop",
+    "prAutoMerge": false,
+    "workflow": "feature/* | fix/* | agent/* -> develop (staging) -> main (production)"
+  },
+
+  "threads": {
+    "default": "L",
+    "maxParallel": 3,
+    "maxIterations": 10,
+    "parallelStrategy": "shared",
+    "worktreeBase": "../ralph-worktrees"
+  },
+
+  "agents": {
+    "backend": ["backend/", "app/", "api/"],
+    "frontend": ["frontend/", "src/", "components/", "pages/", "app/"],
+    "qa": ["tests/", "**/tests/", "conftest.py"],
+    "docs": ["docs/", "*.md"]
+  },
+
+  "validation": {
+    "lintCommand": "",
+    "testCommand": "pytest && npm test",
+    "buildCommand": ""
+  },
+
+  "memory": {
+    "progressFile": "ralph/progress.txt",
+    "prdFile": "ralph/prd.json"
+  },
+
+  "execution": {
+    "mode": "local"
+  },
+
+  "stack": {
+    "backend": "fastapi",
+    "frontend": "next.js+react",
+    "testing": "pytest+jest",
+    "database": "postgresql"
+  },
+
+  "models": {
+    "router": "phase",
+    "default": "opus",
+    "phases": {
+      "planning": "opus",
+      "implementation": "opus",
+      "testing": "sonnet",
+      "documentation": "haiku",
+      "validation": "sonnet",
+      "orchestrator": "opus"
+    },
+    "complexity": {
+      "simple": "sonnet",
+      "moderate": "sonnet",
+      "complex": "opus"
+    },
+    "providers": {
+      "opus": "claude-opus-4-6",
+      "sonnet": "claude-sonnet-4-5-20250929",
+      "haiku": "claude-haiku-4-5-20251001"
+    }
+  },
+
+  "observability": {
+    "enabled": false,
+    "metricsEnabled": false
+  }
+}

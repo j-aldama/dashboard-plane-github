@@ -1,0 +1,70 @@
+server: 127.0.0.1:4050
+
+procs:
+  # === CORE: Claude Code Interactive ===
+  claude-primary:
+    shell: claude
+    autostart: true
+    autorestart: false
+
+  # === DEV SERVER ===
+  fastapi-backend:
+    shell: "uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000"
+    autostart: false
+    autorestart: true
+
+  nextjs-frontend:
+    shell: "cd frontend && npm run dev"
+    autostart: false
+    autorestart: true
+
+  # === MONITORING ===
+  progress-watch:
+    shell: |
+      if [ -f ralph/progress.txt ]; then
+        tail -f ralph/progress.txt
+      else
+        echo "Waiting for ralph/progress.txt..."
+        while [ ! -f ralph/progress.txt ]; do sleep 5; done
+        tail -f ralph/progress.txt
+      fi
+    autostart: false
+    autorestart: true
+
+  logs:
+    shell: "tail -f .claude/logs/actions.log 2>/dev/null || echo 'No logs yet. Waiting...' && sleep infinity"
+    autostart: false
+
+  # === TEST WATCHER ===
+  test-watch-api:
+    shell: "pytest --watch"
+    autostart: false
+
+  test-watch-ui:
+    shell: "cd frontend && npm run test:watch"
+    autostart: false
+
+  # === RALPH THREADS ===
+  ralph-l:
+    shell: "bash ralph/ralph-tac.sh L"
+    autostart: false
+    autorestart: false
+
+  ralph-p:
+    shell: "echo '=== Ralph P-Thread ===' && echo 'Strategies: shared (default) | worktrees (branch per story)' && read -p 'Number of agents (default 4): ' count && read -p 'Strategy [shared/worktrees] (default: config): ' strat && bash ralph/ralph-tac.sh P ${count:-4} ${strat:+--$strat}"
+    autostart: false
+    autorestart: false
+
+  ralph-go:
+    shell: "echo '=== Ralph Go ===' && read -p 'Feature description: ' desc && just ralph-go \"$desc\""
+    autostart: false
+    autorestart: false
+
+  # === MANUAL TERMINAL ===
+  shell:
+    shell: "zsh"
+
+keymap_procs:
+  <C-s>: { c: start-proc }
+  <C-x>: { c: term-proc }
+  <C-r>: { c: restart-proc }
