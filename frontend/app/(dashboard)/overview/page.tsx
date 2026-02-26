@@ -4,14 +4,20 @@ import { useMemo } from "react";
 import { MetricCard } from "@/components/MetricCard";
 import { ChartContainer } from "@/components/ChartContainer";
 import { RankingTable, Column, Row } from "@/components/RankingTable";
-import { StatusBadge } from "@/components/StatusBadge";
 import { Skeleton } from "@/components/Skeleton";
 import {
   CheckCircleIcon,
   ClockIcon,
   GitPullRequestIcon,
   FolderIcon,
+  TrendUpIcon,
+  TrendDownIcon,
 } from "@/components/icons";
+import {
+  useTeamOverview,
+  memberTrendDirection,
+} from "@/hooks/useTeamOverview";
+import { UnifiedMember, TrendDirection } from "@/types/overview";
 import {
   BarChart,
   Bar,
@@ -22,16 +28,21 @@ import {
   Cell,
   PieChart,
   Pie,
+  ResponsiveContainer,
 } from "recharts";
-import {
-  usePlaneTeamMetrics,
-  useGitHubTeamMetrics,
-  mergeMembers,
-} from "@/hooks/useOverviewData";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-const CHART_COLORS = ["#1e40af", "#2563eb", "#3b82f6", "#60a5fa", "#93c5fd"];
+const CHART_COLORS = [
+  "#1e40af",
+  "#2563eb",
+  "#3b82f6",
+  "#60a5fa",
+  "#93c5fd",
+  "#bfdbfe",
+  "#7c3aed",
+  "#a78bfa",
+];
 
 const PRIORITY_COLORS: Record<string, string> = {
   Alta: "#ef4444",
@@ -40,12 +51,24 @@ const PRIORITY_COLORS: Record<string, string> = {
   "Sin asignar": "#94a3b8",
 };
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Chart data builders ──────────────────────────────────────────────────────
 
-function getEffortStatus(effort: number): "green" | "yellow" | "red" {
-  if (effort >= 25) return "green";
-  if (effort >= 15) return "yellow";
-  return "red";
+interface BarDataEntry {
+  name: string;
+  fullName: string;
+  points: number;
+}
+
+function buildBarData(members: UnifiedMember[]): BarDataEntry[] {
+  return members
+    .filter((m) => m.story_points > 0)
+    .sort((a, b) => b.story_points - a.story_points)
+    .slice(0, 8)
+    .map((m) => ({
+      name: m.initials,
+      fullName: m.name,
+      points: m.story_points,
+    }));
 }
 
 interface PrioritySlice {
@@ -55,7 +78,7 @@ interface PrioritySlice {
 }
 
 function buildPriorityDistribution(
-  members: { priority_avg: number; tasks_completed: number }[],
+  members: UnifiedMember[],
 ): PrioritySlice[] {
   let alta = 0;
   let media = 0;
@@ -80,8 +103,38 @@ function buildPriorityDistribution(
     { name: "Alta", value: alta, color: PRIORITY_COLORS["Alta"] },
     { name: "Media", value: media, color: PRIORITY_COLORS["Media"] },
     { name: "Baja", value: baja, color: PRIORITY_COLORS["Baja"] },
-    { name: "Sin asignar", value: sinAsignar, color: PRIORITY_COLORS["Sin asignar"] },
+    {
+      name: "Sin asignar",
+      value: sinAsignar,
+      color: PRIORITY_COLORS["Sin asignar"],
+    },
   ].filter((s) => s.value > 0);
+}
+
+// ── Custom tooltip for horizontal bar chart ──────────────────────────────────
+
+interface BarTooltipPayloadItem {
+  payload: BarDataEntry;
+}
+
+function BarChartTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: BarTooltipPayloadItem[];
+}) {
+  if (!active || !payload || payload.length === 0) return null;
+  const data = payload[0].payload;
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-md">
+      <p className="font-semibold text-slate-800">{data.fullName}</p>
+      <p className="text-slate-500">
+        Story Points:{" "}
+        <span className="font-bold text-blue-700">{data.points}</span>
+      </p>
+    </div>
+  );
 }
 
 // ── Custom tooltip for donut chart ───────────────────────────────────────────
@@ -89,15 +142,16 @@ function buildPriorityDistribution(
 interface DonutPayloadEntry {
   name: string;
   value: number;
-  payload: { name: string; value: number; color: string };
+  payload: PrioritySlice;
 }
 
-interface DonutTooltipProps {
+function DonutTooltip({
+  active,
+  payload,
+}: {
   active?: boolean;
   payload?: DonutPayloadEntry[];
-}
-
-function DonutTooltip({ active, payload }: DonutTooltipProps) {
+}) {
   if (!active || !payload || payload.length === 0) return null;
   const entry = payload[0];
   return (
@@ -105,6 +159,30 @@ function DonutTooltip({ active, payload }: DonutTooltipProps) {
       <p className="font-medium text-slate-700">{entry.name}</p>
       <p className="tabular-nums text-slate-500">{entry.value} tareas</p>
     </div>
+  );
+}
+
+// ── Trend arrow component ────────────────────────────────────────────────────
+
+function MemberTrendArrow({ direction }: { direction: TrendDirection }) {
+  if (direction === "up") {
+    return (
+      <span className="inline-flex items-center text-green-600">
+        <TrendUpIcon size={14} />
+      </span>
+    );
+  }
+  if (direction === "down") {
+    return (
+      <span className="inline-flex items-center text-red-500">
+        <TrendDownIcon size={14} />
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center text-slate-400">
+      <span className="text-base leading-none">--</span>
+    </span>
   );
 }
 
@@ -159,7 +237,7 @@ const memberColumns: Column[] = [
   },
   {
     key: "prs_merged",
-    label: "PRs Mergeados",
+    label: "PRs Merged",
     sortable: true,
     render: (_v, row) => (
       <span className="tabular-nums text-slate-600">
@@ -168,13 +246,20 @@ const memberColumns: Column[] = [
     ),
   },
   {
-    key: "status",
+    key: "commits",
+    label: "Commits",
+    sortable: true,
+    render: (_v, row) => (
+      <span className="tabular-nums text-slate-600">
+        {String(row.commits)}
+      </span>
+    ),
+  },
+  {
+    key: "trend",
     label: "Tendencia",
     render: (_v, row) => (
-      <StatusBadge
-        status={row.status as "green" | "yellow" | "red"}
-        size="sm"
-      />
+      <MemberTrendArrow direction={row.trend_direction as TrendDirection} />
     ),
   },
 ];
@@ -182,65 +267,33 @@ const memberColumns: Column[] = [
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function OverviewPage() {
-  const planeQuery = usePlaneTeamMetrics();
-  const githubQuery = useGitHubTeamMetrics();
+  const { members, kpis, trends, isLoading, isError } = useTeamOverview();
 
-  const isLoading = planeQuery.isLoading || githubQuery.isLoading;
-  const isError = planeQuery.isError || githubQuery.isError;
-
-  // Merge Plane + GitHub members
-  const unified = useMemo(() => {
-    if (!planeQuery.data || !githubQuery.data) return [];
-    return mergeMembers(planeQuery.data.members, githubQuery.data.members);
-  }, [planeQuery.data, githubQuery.data]);
-
-  // KPI values
-  const totalTasksCompleted = planeQuery.data?.total_tasks_completed ?? 0;
-  const totalStoryPoints = planeQuery.data?.total_story_points ?? 0;
-  const memberCount = planeQuery.data?.members.length ?? 0;
-  const avgStoryPoints =
-    memberCount > 0 ? (totalStoryPoints / memberCount).toFixed(1) : "0";
-  const totalPrsMerged = useMemo(
-    () =>
-      githubQuery.data?.members.reduce((acc, m) => acc + m.prs_merged, 0) ?? 0,
-    [githubQuery.data],
+  const barChartData = useMemo(() => buildBarData(members), [members]);
+  const donutData = useMemo(
+    () => buildPriorityDistribution(members),
+    [members],
   );
 
-  // Bar chart data — sorted by story points descending
-  const barChartData = useMemo(() => {
-    return [...unified]
-      .sort((a, b) => b.story_points - a.story_points)
-      .map((m) => ({
-        name: m.initials,
-        fullName: m.name,
-        points: m.story_points,
-      }));
-  }, [unified]);
-
-  // Donut chart data — task distribution by priority
-  const donutData = useMemo(() => {
-    if (!unified.length) return [];
-    return buildPriorityDistribution(unified);
-  }, [unified]);
-
-  // Table rows
-  const tableRows: Row[] = useMemo(() => {
-    return [...unified]
-      .sort((a, b) => b.story_points - a.story_points)
-      .map((m, i) => ({
+  const tableRows: Row[] = useMemo(
+    () =>
+      members.map((m, i) => ({
         rank: i + 1,
-        initials: m.initials,
         name: m.name,
+        avatar_url: m.avatar_url,
+        initials: m.initials,
         github_username: m.github_username,
         story_points: m.story_points,
         tasks_completed: m.tasks_completed,
         prs_merged: m.prs_merged,
-        status: getEffortStatus(m.relative_effort),
-      }));
-  }, [unified]);
+        commits: m.commits,
+        trend_direction: memberTrendDirection(m),
+      })),
+    [members],
+  );
 
   // Error state
-  if (isError && !isLoading) {
+  if (isError && !isLoading && members.length === 0) {
     return (
       <div className="space-y-6">
         <div>
@@ -262,12 +315,13 @@ export default function OverviewPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-slate-900">
           Vista General del Equipo
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Metricas del periodo seleccionado
+          Metricas agregadas del periodo seleccionado
         </p>
       </div>
 
@@ -275,45 +329,46 @@ export default function OverviewPage() {
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           title="Tareas Completadas"
-          value={totalTasksCompleted}
-          trend="neutral"
-          trendValue="periodo actual"
+          value={kpis.totalTasksCompleted}
+          trend={trends.tasks.direction}
+          trendValue={trends.tasks.label}
           icon={<CheckCircleIcon size={18} />}
           loading={isLoading}
         />
         <MetricCard
           title="Story Points Promedio"
-          value={avgStoryPoints}
-          trend="neutral"
-          trendValue="por miembro"
+          value={kpis.avgStoryPoints}
+          trend={trends.points.direction}
+          trendValue={trends.points.label}
           icon={<ClockIcon size={18} />}
           loading={isLoading}
         />
         <MetricCard
           title="PRs Mergeados"
-          value={totalPrsMerged}
-          trend="neutral"
-          trendValue="periodo actual"
+          value={kpis.totalPrsMerged}
+          trend={trends.prs.direction}
+          trendValue={trends.prs.label}
           icon={<GitPullRequestIcon size={18} />}
           loading={isLoading}
         />
         <MetricCard
-          title="Miembros Activos"
-          value={memberCount}
-          trend="neutral"
-          trendValue="en el equipo"
+          title="Proyectos Activos"
+          value={kpis.activeProjects}
+          trend={trends.projects.direction}
+          trendValue={trends.projects.label}
           icon={<FolderIcon size={18} />}
           loading={isLoading}
         />
       </div>
 
-      {/* Chart row: bar chart + donut chart */}
+      {/* Chart row: horizontal bar chart + donut chart */}
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-5">
+        {/* Horizontal bar chart: ranking by fibonacci points */}
         <div className="xl:col-span-3">
           <ChartContainer
-            title="Story Points por Persona"
-            subtitle="Ranking del periodo"
-            height={Math.max(200, barChartData.length * 44)}
+            title="Ranking por Story Points (Fibonacci)"
+            subtitle="Top miembros del periodo"
+            height={Math.max(220, barChartData.length * 44)}
             loading={isLoading}
           >
             <BarChart
@@ -330,21 +385,17 @@ export default function OverviewPage() {
                 tick={{ fontSize: 11 }}
               />
               <Tooltip
-                contentStyle={{
-                  fontSize: 12,
-                  borderRadius: 8,
-                  border: "1px solid #e2e8f0",
-                }}
-                formatter={(value: number) => [`${value} pts`, "Story Points"]}
-                labelFormatter={(label: string) => {
-                  const match = barChartData.find((d) => d.name === label);
-                  return match ? match.fullName : label;
-                }}
+                content={<BarChartTooltip />}
+                cursor={{ fill: "rgba(148, 163, 184, 0.1)" }}
               />
-              <Bar dataKey="points" radius={[0, 4, 4, 0]}>
+              <Bar
+                dataKey="points"
+                radius={[0, 4, 4, 0]}
+                name="Story Points"
+              >
                 {barChartData.map((_, index) => (
                   <Cell
-                    key={index}
+                    key={`bar-${index}`}
                     fill={CHART_COLORS[index % CHART_COLORS.length]}
                   />
                 ))}
@@ -353,33 +404,56 @@ export default function OverviewPage() {
           </ChartContainer>
         </div>
 
+        {/* Donut chart: task distribution by priority */}
         <div className="xl:col-span-2">
           {isLoading ? (
             <Skeleton variant="chart" />
           ) : donutData.length > 0 ? (
-            <ChartContainer
-              title="Distribucion por Prioridad"
-              subtitle="Tareas completadas"
-              height={220}
-            >
-              <PieChart>
-                <Pie
-                  data={donutData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={80}
-                  paddingAngle={3}
-                >
-                  {donutData.map((entry, index) => (
-                    <Cell key={index} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip content={<DonutTooltip />} />
-              </PieChart>
-            </ChartContainer>
+            <div className="rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
+              <div className="mb-4">
+                <h3 className="text-sm font-semibold text-slate-700">
+                  Distribucion por Prioridad
+                </h3>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  Tareas completadas por nivel de prioridad
+                </p>
+              </div>
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie
+                    data={donutData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={80}
+                    paddingAngle={3}
+                    strokeWidth={2}
+                    stroke="#fff"
+                  >
+                    {donutData.map((entry, idx) => (
+                      <Cell key={`pie-${idx}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<DonutTooltip />} />
+                </PieChart>
+              </ResponsiveContainer>
+              {/* Legend */}
+              <div className="mt-2 flex flex-wrap justify-center gap-4">
+                {donutData.map((entry) => (
+                  <div key={entry.name} className="flex items-center gap-1.5">
+                    <span
+                      className="inline-block h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: entry.color }}
+                    />
+                    <span className="text-xs text-slate-500">
+                      {entry.name} ({entry.value})
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           ) : (
             <div className="flex h-full items-center justify-center rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
               <p className="text-sm text-slate-400">
@@ -390,14 +464,21 @@ export default function OverviewPage() {
         </div>
       </div>
 
-      {/* Team summary table */}
+      {/* Summary table */}
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-700">
-            Ranking del Equipo
-          </h2>
-          {planeQuery.data?.is_cached && (
-            <span className="text-xs text-slate-400">datos en cache</span>
+          <div>
+            <h2 className="text-sm font-semibold text-slate-700">
+              Resumen del Equipo
+            </h2>
+            <p className="mt-0.5 text-xs text-slate-400">
+              Metricas unificadas Plane + GitHub por miembro
+            </p>
+          </div>
+          {!isLoading && (
+            <span className="text-xs text-slate-400">
+              {members.length} miembro{members.length !== 1 ? "s" : ""}
+            </span>
           )}
         </div>
         <RankingTable
