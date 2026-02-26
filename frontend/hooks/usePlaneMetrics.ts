@@ -30,7 +30,6 @@ export function usePlaneMetricsForMember(memberId: number) {
         `/metrics/plane/${memberId}?from=${from}&to=${to}`,
       ),
     staleTime: 4 * 60 * 1000,       // 4 minutes
-    refetchInterval: 5 * 60 * 1000, // 5 minutes
     enabled: memberId > 0,
   });
 }
@@ -51,6 +50,5 @@ export function usePlaneMetricsOverview() {
         `/metrics/plane?from=${from}&to=${to}`,
       ),
     staleTime: 4 * 60 * 1000,
-    refetchInterval: 5 * 60 * 1000,
   });
 }

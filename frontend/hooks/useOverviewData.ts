@@ -19,7 +19,6 @@ export function usePlaneTeamMetrics() {
     queryKey: ["plane", "team-metrics"],
     queryFn: () => api.get<PlaneTeamMetricsResponse>("/api/plane/team-metrics"),
     staleTime: 4 * 60 * 1000,
-    refetchInterval: 5 * 60 * 1000,
   });
 }
 
@@ -38,7 +37,6 @@ export function useGitHubTeamMetrics() {
         `/api/github/team-metrics?from=${from}&to=${to}`,
       ),
     staleTime: 4 * 60 * 1000,
-    refetchInterval: 5 * 60 * 1000,
   });
 }
 

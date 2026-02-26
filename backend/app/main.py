@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.redis_client import close_redis
 from app.config import settings
-from app.routers import health, plane, github
+from app.routers import health, plane, github, sync
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -37,6 +37,7 @@ app.include_router(health.router, tags=["health"])
 # app.include_router(github_router, prefix="/api/github", tags=["github"])  # EXEC-003
 app.include_router(plane.router)
 app.include_router(github.router)
+app.include_router(sync.router)
 
 
 # ---------------------------------------------------------------------------

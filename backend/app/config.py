@@ -29,14 +29,14 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = Field(default="redis://redis:6379", alias="REDIS_URL")
 
-    # Cache TTL (seconds)
-    cache_ttl: int = Field(default=300, alias="CACHE_TTL")
+    # Cache TTL (seconds) — 1 hour default since refresh is manual
+    cache_ttl: int = Field(default=3600, alias="CACHE_TTL")
 
     # Backend
     api_port: int = Field(default=8000, alias="API_PORT")
     secret_key: str = Field(default="change-me-in-production", alias="SECRET_KEY")
     allowed_origins: str = Field(
-        default="http://localhost:3000", alias="ALLOWED_ORIGINS"
+        default="http://localhost:3000,http://localhost:3030", alias="ALLOWED_ORIGINS"
     )
 
     @property

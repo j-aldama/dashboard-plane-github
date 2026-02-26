@@ -10,7 +10,6 @@ export function usePlaneProjects() {
   return useQuery<ProjectsResponse>({
     queryKey: ["plane", "projects"],
     queryFn: () => api.get<ProjectsResponse>("/api/plane/projects"),
-    refetchInterval: 5 * 60 * 1000,
   });
 }
 
@@ -22,6 +21,5 @@ export function usePlaneCycles() {
   return useQuery<CyclesResponse>({
     queryKey: ["plane", "cycles"],
     queryFn: () => api.get<CyclesResponse>("/api/plane/cycles"),
-    refetchInterval: 5 * 60 * 1000,
   });
 }

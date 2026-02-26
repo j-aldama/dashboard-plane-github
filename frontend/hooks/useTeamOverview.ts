@@ -24,7 +24,6 @@ export function usePlaneProjects() {
     queryFn: () =>
       api.get<PlaneProjectsResponse>("/api/plane/projects"),
     staleTime: 4 * 60 * 1000,
-    refetchInterval: 5 * 60 * 1000,
   });
 }
 
@@ -53,7 +52,6 @@ function usePreviousGitHubTeamMetrics() {
         `/api/github/team-metrics?from=${from}&to=${to}`,
       ),
     staleTime: 10 * 60 * 1000,
-    refetchInterval: 10 * 60 * 1000,
   });
 }
 

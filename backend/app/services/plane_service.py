@@ -4,6 +4,7 @@ Fetches workspace members, projects, cycles, and issues from the Plane API.
 Implements Redis caching with PostgreSQL snapshot fallback.
 """
 
+import asyncio
 import logging
 from datetime import date, datetime, timezone
 
@@ -38,6 +39,8 @@ CACHE_KEY_CYCLE_ANALYSIS = "plane:cycle:{cycle_id}:analysis"
 # Plane API pagination defaults
 _PAGE_SIZE = 100
 _REQUEST_TIMEOUT = 30.0
+# Delay between paginated requests to avoid Plane 429 rate-limits
+_PAGE_DELAY = 0.3
 
 
 class PlaneAPIError(Exception):
@@ -90,6 +93,7 @@ class PlaneService:
                     all_results.extend(data["results"])
                     if data.get("next_page_results", False):
                         page += 1
+                        await asyncio.sleep(_PAGE_DELAY)
                         continue
                     return all_results
 

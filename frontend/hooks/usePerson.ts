@@ -19,7 +19,6 @@ export function usePlaneTeamMetrics() {
     queryFn: () =>
       api.get<PlaneTeamMetricsResponse>("/api/plane/team-metrics"),
     staleTime: 4 * 60 * 1000,
-    refetchInterval: 5 * 60 * 1000,
   });
 }
 
@@ -38,7 +37,6 @@ export function useGitHubTeamMetrics() {
         `/api/github/team-metrics?from=${from}&to=${to}`,
       ),
     staleTime: 4 * 60 * 1000,
-    refetchInterval: 5 * 60 * 1000,
   });
 }
 
@@ -69,7 +67,6 @@ export function usePersonCycles() {
     queryKey: ["plane", "cycles"],
     queryFn: () => api.get<CyclesResponse>("/api/plane/cycles"),
     staleTime: 4 * 60 * 1000,
-    refetchInterval: 5 * 60 * 1000,
   });
 }
 

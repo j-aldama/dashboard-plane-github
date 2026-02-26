@@ -13,7 +13,6 @@ export function useProjects() {
     queryKey: ["plane", "projects"],
     queryFn: () => api.get<ProjectsResponse>("/api/plane/projects"),
     staleTime: 4 * 60 * 1000,
-    refetchInterval: 5 * 60 * 1000,
   });
 }
 
@@ -25,7 +24,6 @@ export function useProjectCycles() {
     queryKey: ["plane", "cycles"],
     queryFn: () => api.get<CyclesResponse>("/api/plane/cycles"),
     staleTime: 4 * 60 * 1000,
-    refetchInterval: 5 * 60 * 1000,
   });
 }
 

@@ -1,0 +1,151 @@
+{
+  "project": "Executive Dashboard",
+  "identifier": "EXDASH",
+  "branchName": "feature/executive-dashboard",
+  "description": "Dashboard ejecutivo con FastAPI + Next.js que integra Plane y GitHub para dar visibilidad completa del equipo de desarrollo. Incluye métricas de equipo desde Plane (puntos fibonacci, tareas, prioridad, esfuerzo), métricas GitHub por persona (PRs, commits, líneas de código), estado de proyectos con semáforo (desarrollo vs soporte), análisis por ciclo Scrum, y vistas interactivas diseñadas para directivos no técnicos. Stack: FastAPI backend con Redis caché y PostgreSQL para históricos, Next.js frontend con Recharts, todo containerizado en Docker.",
+  "userStories": [
+    {
+      "id": "EXDASH-001",
+      "title": "Docker infrastructure and service scaffolding",
+      "description": "Crear la infraestructura Docker completa con docker-compose que levante todos los servicios del proyecto. Contenedores necesarios: (1) FastAPI backend en Python 3.12+ con uvicorn, (2) Next.js frontend con Node 20+, (3) PostgreSQL 16 para almacenamiento histórico de métricas, (4) Redis 7 para caché de respuestas de APIs externas. El docker-compose debe incluir health checks, volúmenes persistentes para PostgreSQL, red interna compartida, y variables de entorno configurables via .env. El backend FastAPI debe tener estructura base con routers, schemas Pydantic, modelos SQLAlchemy, y conexión a PostgreSQL via asyncpg. El frontend Next.js debe tener App Router configurado, layout base con sidebar de navegación, y estructura de carpetas para components, hooks, services y types. Incluir Makefile o scripts para facilitar el desarrollo local.",
+      "acceptanceCriteria": [
+        "docker-compose up levanta los 4 servicios (FastAPI, Next.js, PostgreSQL, Redis) sin errores",
+        "FastAPI responde en /api/health con status 200 y conexión verificada a PostgreSQL y Redis",
+        "Next.js responde en localhost:3000 con layout base que incluye sidebar de navegación",
+        "PostgreSQL acepta conexiones y tiene schema base migrado con Alembic",
+        "Redis acepta conexiones y responde a PING",
+        "Variables de entorno configurables via archivo .env (con .env.example documentado)",
+        "Hot reload funciona tanto en backend como en frontend dentro de Docker"
+      ],
+      "storyPoints": 8,
+      "priority": 1,
+      "domain": "backend",
+      "passes": false,
+      "dependencies": []
+    },
+    {
+      "id": "EXDASH-002",
+      "title": "Plane API integration backend endpoints",
+      "description": "Implementar los endpoints de FastAPI que consumen la API de Plane para extraer todas las métricas de equipo. Endpoints necesarios: (1) GET /api/plane/team-metrics — retorna por cada miembro del workspace: total de story points completados (fibonacci), tareas completadas, prioridad promedio de tareas asignadas, esfuerzo relativo (story points / tareas). (2) GET /api/plane/projects — retorna lista de proyectos con: nombre, fecha inicio, fecha fin estimada, estado (desarrollo o soporte; soporte = proyecto con intake activo en Plane, desarrollo = sin intake), semáforo calculado (verde=en tiempo, amarillo=75%+ del tiempo consumido, rojo=pasó fecha fin o soporte). (3) GET /api/plane/cycles — retorna ciclos del proyecto con: tareas asignadas vs completadas, tasa de completitud porcentual, y si el ciclo cerró incompleto: ranking de quién hizo más/menos puntos, quién más/menos tareas, quién resolvió tareas más/menos complejas. (4) GET /api/plane/cycles/{cycle_id}/breakdown — detalle granular de un ciclo específico. Implementar un servicio PlaneClient como clase async que encapsule todas las llamadas a la API de Plane, con retry logic y manejo de rate limits. Cachear respuestas en Redis con TTL configurable (default 5 minutos). Guardar snapshots históricos en PostgreSQL cada vez que se consultan métricas (para poder ver tendencias).",
+      "acceptanceCriteria": [
+        "GET /api/plane/team-metrics retorna array de miembros con campos: member_id, display_name, avatar_url, total_story_points, tasks_completed, avg_priority, relative_effort",
+        "GET /api/plane/projects retorna proyectos con campos: id, name, start_date, end_date, status (development|support), traffic_light (green|yellow|red), completion_percentage",
+        "GET /api/plane/cycles retorna ciclos con: id, name, start_date, end_date, assigned_tasks, completed_tasks, completion_rate, is_complete, member_breakdown (si incompleto)",
+        "GET /api/plane/cycles/{cycle_id}/breakdown retorna detalle con ranking por puntos, por tareas, y por complejidad resuelta",
+        "Respuestas cacheadas en Redis con TTL configurable via variable de entorno PLANE_CACHE_TTL",
+        "Snapshots históricos guardados en tabla plane_metrics_history en PostgreSQL con timestamp",
+        "PlaneClient maneja errores de API (401, 429, 500) con mensajes claros y retry automático",
+        "Tests unitarios con mocks para cada endpoint que cubran happy path y errores"
+      ],
+      "storyPoints": 13,
+      "priority": 2,
+      "domain": "backend",
+      "passes": false,
+      "dependencies": ["EXDASH-001"]
+    },
+    {
+      "id": "EXDASH-003",
+      "title": "GitHub API integration backend endpoints",
+      "description": "Implementar los endpoints de FastAPI que consumen la GitHub API para extraer métricas de código por persona. Endpoints necesarios: (1) GET /api/github/team-metrics — retorna por cada miembro: PRs abiertos, mergeados y rechazados (con conteo y listado), total de commits en período configurable, líneas de código añadidas y eliminadas, y un ranking calculado del equipo basado en productividad (ponderación configurable de PRs mergeados, commits y líneas netas). (2) GET /api/github/members/{username}/detail — detalle de un miembro específico con histórico de actividad por semana/mes. (3) GET /api/github/repositories — lista de repos del org con actividad reciente. Implementar GitHubClient como clase async usando httpx para consumir la GitHub REST API v3. Mapear usuarios de GitHub con miembros de Plane usando un archivo de configuración o tabla de mapping (github_username <-> plane_member_id). Cachear en Redis con TTL configurable (default 10 minutos, ya que GitHub tiene rate limits más estrictos). Guardar históricos en PostgreSQL para tendencias.",
+      "acceptanceCriteria": [
+        "GET /api/github/team-metrics retorna array con: username, avatar_url, prs_open, prs_merged, prs_rejected, total_commits, lines_added, lines_deleted, productivity_score, rank",
+        "GET /api/github/members/{username}/detail retorna actividad semanal/mensual con commits, PRs y líneas de código",
+        "GET /api/github/repositories retorna repos con nombre, último commit, contribuidores activos y actividad reciente",
+        "Mapping configurable entre usuarios GitHub y miembros Plane (tabla user_mappings en PostgreSQL)",
+        "Respuestas cacheadas en Redis con TTL configurable via GITHUB_CACHE_TTL",
+        "GitHubClient maneja rate limits de GitHub (header X-RateLimit-Remaining) con backoff automático",
+        "Históricos guardados en tabla github_metrics_history con timestamp para tendencias",
+        "Tests unitarios con mocks que cubran happy path, rate limits y errores de autenticación"
+      ],
+      "storyPoints": 13,
+      "priority": 2,
+      "domain": "backend",
+      "passes": false,
+      "dependencies": ["EXDASH-001"]
+    },
+    {
+      "id": "EXDASH-004",
+      "title": "Team overview and comparison dashboard view",
+      "description": "Implementar la vista principal del dashboard: Team Overview. Esta es la landing page que ven los directivos al entrar. Debe incluir: (1) KPI cards en la parte superior mostrando métricas agregadas del equipo: total story points del ciclo actual, tareas completadas, PRs mergeados esta semana, y promedio de productividad. (2) Tabla/grid de miembros del equipo con avatar, nombre, story points, tareas completadas, PRs mergeados, y barra de productividad relativa (normalizada al máximo del equipo). Clickeable para ir al detalle de persona. (3) Gráfica de barras comparativa (Recharts BarChart) mostrando story points por miembro lado a lado. (4) Gráfica de radar (Recharts RadarChart) para comparar múltiples dimensiones entre 2-4 miembros seleccionables. (5) Filtros por período (esta semana, este mes, este ciclo, custom range). El diseño debe ser ejecutivo: fondo claro, tipografía limpia, colores corporativos suaves, sin jerga técnica visible. Usar TanStack Query (react-query) para fetch de datos con refetch automático. Crear componentes reutilizables: KPICard, MemberRow, ComparisonChart, RadarComparison, PeriodFilter.",
+      "acceptanceCriteria": [
+        "Landing page muestra 4 KPI cards con métricas agregadas del equipo con datos reales de la API",
+        "Tabla de miembros muestra avatar, nombre, story points, tareas, PRs y barra de productividad relativa",
+        "Click en un miembro navega a /team/{member_id} con vista de detalle",
+        "Gráfica de barras comparativa renderiza correctamente con Recharts para todos los miembros",
+        "Gráfica de radar permite seleccionar 2-4 miembros y compara: story points, tareas, PRs, commits, líneas de código",
+        "Filtro de período funciona y actualiza todas las métricas y gráficas al cambiar",
+        "Diseño responsive: funciona correctamente en pantallas >= 1024px",
+        "Loading states con skeletons mientras cargan los datos, error states con mensajes amigables",
+        "TanStack Query configurado con staleTime apropiado y refetch en window focus"
+      ],
+      "storyPoints": 13,
+      "priority": 3,
+      "domain": "frontend",
+      "passes": false,
+      "dependencies": ["EXDASH-002", "EXDASH-003"]
+    },
+    {
+      "id": "EXDASH-005",
+      "title": "Project status view with traffic light indicators",
+      "description": "Implementar la vista de Estado de Proyectos que muestra todos los proyectos del equipo con indicadores visuales tipo semáforo. Debe incluir: (1) Grid de project cards con: nombre del proyecto, tipo (Desarrollo o Soporte), fecha inicio, fecha fin estimada, progreso porcentual, y semáforo grande visible (verde/amarillo/rojo). (2) Lógica de semáforo: VERDE = proyecto en tiempo (progreso proporcional al tiempo transcurrido), AMARILLO = más del 75% del tiempo consumido con menos del 60% de progreso o en soporte con intake alto, ROJO = pasó fecha de entrega o ciclo actual atrasado significativamente. (3) Vista de timeline (Gantt simplificado) mostrando los proyectos en una línea de tiempo horizontal con colores de semáforo. (4) Panel lateral al clickear un proyecto mostrando: equipo asignado, ciclo actual, métricas del ciclo, y mini-gráfica de burndown. (5) Filtros: por estado (todos, desarrollo, soporte), por semáforo (todos, verde, amarillo, rojo), por equipo. Diseño orientado a que un director vea de un vistazo qué proyectos necesitan atención.",
+      "acceptanceCriteria": [
+        "Grid de project cards muestra nombre, tipo, fechas, progreso y semáforo con colores correctos",
+        "Semáforo se calcula automáticamente según la lógica definida (verde/amarillo/rojo)",
+        "Proyectos de soporte (con intake activo) se identifican correctamente y muestran badge Soporte",
+        "Vista timeline muestra proyectos en línea de tiempo horizontal con barras coloreadas por semáforo",
+        "Click en proyecto abre panel lateral con detalle: equipo, ciclo actual, métricas y burndown",
+        "Filtros por estado, semáforo y equipo funcionan y se pueden combinar",
+        "Al menos un indicador visual de necesita atención para proyectos en rojo",
+        "Datos se refrescan automáticamente cada 5 minutos sin recargar la página"
+      ],
+      "storyPoints": 8,
+      "priority": 3,
+      "domain": "frontend",
+      "passes": false,
+      "dependencies": ["EXDASH-002"]
+    },
+    {
+      "id": "EXDASH-006",
+      "title": "Cycle analytics and individual member detail views",
+      "description": "Implementar dos vistas complementarias: (A) Vista de Ciclos Scrum y (B) Vista de Detalle por Persona. VISTA CICLOS: (1) Selector de ciclo activo y histórico de ciclos cerrados en sidebar o dropdown. (2) Para el ciclo seleccionado: gráfica de donut mostrando tareas completadas vs pendientes, tabla de miembros con tareas asignadas vs completadas y puntos. (3) Si el ciclo no se completó al 100%: sección destacada mostrando análisis — quién hizo más puntos (MVP), quién menos, quién completó más tareas, quién menos, quién resolvió las tareas más complejas (mayor story points individual) y quién las menos complejas. Usar colores para destacar top/bottom performers sin ser punitivo. (4) Gráfica de línea con histórico de tasa de completitud por ciclo (últimos 6-12 ciclos). VISTA PERSONA: (1) Header con avatar, nombre y rol. (2) Tabs: Plane Metrics (story points, tareas, prioridad, esfuerzo por ciclo), GitHub Metrics (PRs, commits, líneas por semana), Histórico (gráficas de tendencia últimos 3 meses). (3) Gráfica de área mostrando productividad semanal combinando Plane + GitHub. (4) Comparador inline: dropdown para seleccionar otro miembro y ver side-by-side.",
+      "acceptanceCriteria": [
+        "Vista ciclos muestra selector funcional de ciclo activo e históricos",
+        "Donut chart renderiza correctamente la proporción completadas/pendientes del ciclo seleccionado",
+        "Tabla de miembros del ciclo muestra asignadas vs completadas con porcentaje individual",
+        "Ciclos incompletos muestran sección de análisis con MVP, rankings de puntos, tareas y complejidad",
+        "Gráfica de línea muestra histórico de completitud de los últimos ciclos disponibles",
+        "Vista persona muestra header con datos del miembro y tabs funcionales (Plane, GitHub, Histórico)",
+        "Tab Plane muestra story points, tareas, prioridad y esfuerzo desglosados por ciclo",
+        "Tab GitHub muestra PRs, commits y líneas de código con gráfica semanal",
+        "Comparador inline permite seleccionar otro miembro y muestra métricas side-by-side",
+        "Todas las gráficas son interactivas: tooltips al hover, leyendas clickeables"
+      ],
+      "storyPoints": 13,
+      "priority": 4,
+      "domain": "frontend",
+      "passes": false,
+      "dependencies": ["EXDASH-002", "EXDASH-003", "EXDASH-004"]
+    },
+    {
+      "id": "EXDASH-007",
+      "title": "End-to-end testing, polish and production readiness",
+      "description": "Testing integral y pulido final del dashboard para asegurar calidad de producción. (1) Tests de integración del backend: verificar que los endpoints retornan datos correctos con mocks de las APIs de Plane y GitHub, verificar que el caché Redis funciona (segunda llamada viene de caché), verificar que los históricos se guardan en PostgreSQL. (2) Tests del frontend: tests de componentes con React Testing Library para KPICard, MemberRow, ComparisonChart, ProjectCard, CycleAnalysis. Tests de integración de páginas verificando que renderizan con datos mockeados. (3) Configuración de CI básica: Dockerfile optimizado multi-stage para producción (backend y frontend), docker-compose.prod.yml con configuración de producción. (4) Pulido de UI: asegurar consistencia visual en todas las vistas, verificar que loading/error states funcionan en todos los componentes, verificar responsive en pantallas grandes (1280px+). (5) Documentación: README actualizado con instrucciones de setup, configuración de variables de entorno, y guía de despliegue con Docker.",
+      "acceptanceCriteria": [
+        "Tests de integración backend pasan: endpoints retornan schemas correctos con mocks",
+        "Test verifica que segunda llamada a endpoint usa caché de Redis (no llama API externa)",
+        "Test verifica que snapshots históricos se guardan en PostgreSQL tras consulta",
+        "Tests de componentes frontend pasan para al menos 5 componentes principales",
+        "Tests de páginas verifican render correcto con datos mockeados para las 4 vistas principales",
+        "Dockerfile multi-stage genera imagen de producción funcional para backend y frontend",
+        "docker-compose.prod.yml levanta todos los servicios en modo producción",
+        "Todas las vistas muestran loading skeletons y error states apropiados",
+        "README incluye: requisitos, setup local, variables de entorno necesarias y guía de despliegue"
+      ],
+      "storyPoints": 8,
+      "priority": 5,
+      "domain": "qa",
+      "passes": false,
+      "dependencies": ["EXDASH-004", "EXDASH-005", "EXDASH-006"]
+    }
+  ]
+}

@@ -14,7 +14,6 @@ export function usePlaneTeam() {
   return useQuery<PlaneTeamResponse>({
     queryKey: ["plane", "team-metrics"],
     queryFn: () => api.get<PlaneTeamResponse>("/api/plane/team-metrics"),
-    refetchInterval: 5 * 60 * 1000,
   });
 }
 
@@ -32,7 +31,6 @@ export function useGitHubTeam() {
       api.get<GitHubTeamResponse>(
         `/api/github/team-metrics?from=${from}&to=${to}`,
       ),
-    refetchInterval: 5 * 60 * 1000,
   });
 }
 
@@ -51,6 +49,5 @@ export function useGitHubMemberDetail(username: string | null) {
         `/api/github/member/${username}/detail?from=${from}&to=${to}`,
       ),
     enabled: !!username,
-    refetchInterval: 5 * 60 * 1000,
   });
 }

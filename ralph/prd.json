@@ -1,0 +1,155 @@
+{
+  "project": "Sync Progress Window",
+  "identifier": "SYNC",
+  "branchName": "feature/sync-progress-window",
+  "description": "Agregar una ventana modal de progreso cuando el usuario hace click en Sincronizar, que muestre en tiempo real cada paso del proceso de sincronizaci\u00f3n (limpiar cach\u00e9, obtener datos de Plane, obtener datos de GitHub) con indicadores visuales de estado (pendiente, en progreso, completado, error) para que el usuario sepa exactamente en qu\u00e9 parte del proceso se encuentra.",
+  "userStories": [
+    {
+      "id": "SYNC-001",
+      "title": "Backend: endpoint SSE de sincronizaci\u00f3n con progreso por pasos",
+      "description": "Crear un nuevo endpoint POST /api/sync/stream que use Server-Sent Events (SSE) para reportar el progreso de la sincronizaci\u00f3n paso a paso. En lugar del endpoint actual que solo limpia el cach\u00e9 Redis de golpe y retorna un JSON final, este endpoint debe ejecutar cada fase secuencialmente y emitir eventos SSE con el formato {step, status, message, progress}. Los pasos son: 1) clear_cache (limpiar claves plane:* y github:* de Redis), 2) fetch_plane_metrics (llamar a plane_service.get_team_metrics con force_refresh=True o tras limpiar solo sus claves), 3) fetch_plane_projects (llamar a plane_service.get_projects), 4) fetch_plane_cycles (llamar a plane_service.get_cycles), 5) fetch_github_metrics (llamar a github_service.get_team_metrics). Cada paso emite un evento 'progress' al iniciar (status: in_progress) y al completar (status: completed) o fallar (status: error con mensaje). Al final emite un evento 'complete' con resumen. El endpoint actual POST /api/sync debe mantenerse intacto como fallback. Archivo principal: backend/app/routers/sync.py. Usar StreamingResponse de FastAPI con media_type text/event-stream.",
+      "acceptanceCriteria": [
+        "El endpoint POST /api/sync/stream retorna Content-Type: text/event-stream",
+        "Cada paso emite al menos 2 eventos SSE: uno al iniciar (status: in_progress) y uno al completar (status: completed/error)",
+        "El formato de cada evento es: data: {\"step\":\"clear_cache\",\"status\":\"in_progress\",\"message\":\"Limpiando cach\u00e9...\",\"progress\":10}\\n\\n",
+        "Los 5 pasos se ejecutan secuencialmente: clear_cache -> fetch_plane_metrics -> fetch_plane_projects -> fetch_plane_cycles -> fetch_github_metrics",
+        "Si un paso falla, se emite status: error para ese paso y se contin\u00faa con el siguiente",
+        "Al finalizar todos los pasos se emite un evento con type: complete y resumen de pasos exitosos/fallidos",
+        "El endpoint existente POST /api/sync sigue funcionando sin cambios"
+      ],
+      "storyPoints": 5,
+      "priority": 1,
+      "domain": "backend",
+      "passes": true,
+      "dependencies": []
+    },
+    {
+      "id": "SYNC-002",
+      "title": "Frontend: componente SyncProgressModal con dise\u00f1o de pasos",
+      "description": "Crear un componente React SyncProgressModal que renderice una ventana modal overlay con la lista de pasos de sincronizaci\u00f3n y su estado visual. El modal debe aparecer centrado con un backdrop semitransparente oscuro. Dentro, mostrar un t\u00edtulo 'Sincronizando datos...' y una lista vertical de 5 pasos, cada uno con: un \u00edcono de estado (spinner para in_progress, check verde para completed, X roja para error, c\u00edrculo gris para pending), el nombre descriptivo del paso, y opcionalmente un mensaje de detalle. Incluir una barra de progreso general en la parte superior que avance seg\u00fan el porcentaje reportado por el SSE. Al completarse todos los pasos, cambiar el t\u00edtulo a 'Sincronizaci\u00f3n completada' (o 'Sincronizaci\u00f3n con errores' si hubo fallos), y mostrar un bot\u00f3n 'Cerrar' que desmonte el modal. El componente debe usar Tailwind CSS consistente con el dise\u00f1o existente del dashboard (colores slate, bordes redondeados, sombras). Archivo: frontend/components/SyncProgressModal.tsx. Props: isOpen, onClose, steps (array de {id, label, status, message}).",
+      "acceptanceCriteria": [
+        "El modal se renderiza con backdrop oscuro semitransparente que cubre toda la pantalla",
+        "Muestra una lista de 5 pasos con iconos de estado: pending (c\u00edrculo gris), in_progress (spinner animado), completed (check verde), error (X roja)",
+        "Una barra de progreso en la parte superior refleja el porcentaje de avance",
+        "Al completar todos los pasos, el t\u00edtulo cambia y aparece bot\u00f3n 'Cerrar'",
+        "El modal no se puede cerrar haciendo click fuera mientras la sincronizaci\u00f3n est\u00e1 en progreso",
+        "El dise\u00f1o usa Tailwind CSS consistente con el resto del dashboard (slate, rounded, shadows)",
+        "El componente es responsive y se ve bien en pantallas desde 768px de ancho"
+      ],
+      "storyPoints": 5,
+      "priority": 1,
+      "domain": "frontend",
+      "passes": true,
+      "dependencies": []
+    },
+    {
+      "id": "SYNC-003",
+      "title": "Frontend: hook useSyncProgress para consumir SSE del backend",
+      "description": "Crear un custom hook useSyncProgress que gestione la conexi\u00f3n SSE con el endpoint POST /api/sync/stream y exponga el estado reactivo de cada paso de sincronizaci\u00f3n. El hook debe: 1) Proveer una funci\u00f3n startSync() que inicie la conexi\u00f3n SSE usando fetch con ReadableStream (no EventSource, ya que necesitamos POST). 2) Mantener un estado steps como array de {id, label, status, message, progress} inicializado con los 5 pasos en status pending. 3) Parsear cada l\u00ednea 'data: {...}' del stream y actualizar el paso correspondiente. 4) Exponer: steps (estado actual de cada paso), issyncing (boolean), overallProgress (n\u00famero 0-100), error (string|null), startSync (funci\u00f3n). 5) Al recibir el evento complete, marcar isSyncing=false e invalidar todas las queries de React Query (queryClient.invalidateQueries()) para refrescar el dashboard. 6) Manejar errores de red: si la conexi\u00f3n se corta, marcar los pasos restantes como error. Archivo: frontend/hooks/useSyncProgress.ts. Usar el api base URL de frontend/lib/api.ts para construir la URL del endpoint.",
+      "acceptanceCriteria": [
+        "El hook expone: steps, isSyncing, overallProgress, error, startSync",
+        "startSync() inicia una conexi\u00f3n fetch con streaming al POST /api/sync/stream",
+        "Cada evento SSE recibido actualiza el paso correspondiente en el estado steps",
+        "overallProgress se calcula del campo progress del \u00faltimo evento recibido",
+        "Al recibir el evento complete, se ejecuta queryClient.invalidateQueries()",
+        "Si la conexi\u00f3n se pierde, los pasos pendientes se marcan como error",
+        "El hook limpia la conexi\u00f3n si el componente se desmonta durante la sincronizaci\u00f3n"
+      ],
+      "storyPoints": 5,
+      "priority": 2,
+      "domain": "frontend",
+      "passes": true,
+      "dependencies": [
+        "SYNC-001"
+      ]
+    },
+    {
+      "id": "SYNC-004",
+      "title": "Frontend: integrar SyncProgressModal con bot\u00f3n Sincronizar existente",
+      "description": "Modificar el componente FreshnessIndicator.tsx para que al hacer click en el bot\u00f3n 'Sincronizar', en lugar de la l\u00f3gica actual (POST /api/sync directo + invalidateQueries), se abra el SyncProgressModal y se use el hook useSyncProgress para gestionar la sincronizaci\u00f3n con progreso visual. Pasos: 1) Importar SyncProgressModal y useSyncProgress. 2) Reemplazar el estado isSyncing local y la funci\u00f3n handleSync por los valores del hook useSyncProgress. 3) Agregar estado isModalOpen para controlar la visibilidad del modal. 4) Al hacer click en Sincronizar: setIsModalOpen(true) y llamar startSync(). 5) Pasar los props correctos al SyncProgressModal: isOpen, onClose (que hace setIsModalOpen(false) solo si !isSyncing), steps del hook. 6) Mantener el \u00edcono de CloudSync rotando en el bot\u00f3n mientras isSyncing sea true (comportamiento existente). 7) Asegurar que el bot\u00f3n Sincronizar quede disabled mientras isSyncing. El bot\u00f3n Actualizar (refresh) NO debe verse afectado por este cambio. Archivo a modificar: frontend/components/FreshnessIndicator.tsx.",
+      "acceptanceCriteria": [
+        "Click en Sincronizar abre el SyncProgressModal con los pasos en estado pending",
+        "La sincronizaci\u00f3n inicia autom\u00e1ticamente al abrir el modal",
+        "El bot\u00f3n Sincronizar muestra \u00edcono rotando y queda disabled durante la sincronizaci\u00f3n",
+        "El modal muestra el progreso en tiempo real de cada paso",
+        "Al completar la sincronizaci\u00f3n, el dashboard se refresca con datos actualizados",
+        "El bot\u00f3n Actualizar (refresh) sigue funcionando independientemente sin abrir modal",
+        "Si el modal se cierra despu\u00e9s de completar, el estado se resetea correctamente para la pr\u00f3xima sincronizaci\u00f3n"
+      ],
+      "storyPoints": 3,
+      "priority": 2,
+      "domain": "frontend",
+      "passes": true,
+      "dependencies": [
+        "SYNC-002",
+        "SYNC-003"
+      ]
+    },
+    {
+      "id": "SYNC-005",
+      "title": "Frontend: labels descriptivos en espa\u00f1ol y UX de los pasos de sincronizaci\u00f3n",
+      "description": "Definir las constantes de los 5 pasos de sincronizaci\u00f3n con labels descriptivos en espa\u00f1ol que el usuario pueda entender f\u00e1cilmente, y agregar detalles de UX como mensajes de error amigables y transiciones suaves. Los pasos con sus labels deben ser: 1) clear_cache \u2192 'Limpiando datos en cach\u00e9' 2) fetch_plane_metrics \u2192 'Obteniendo m\u00e9tricas del equipo desde Plane' 3) fetch_plane_projects \u2192 'Obteniendo proyectos desde Plane' 4) fetch_plane_cycles \u2192 'Obteniendo ciclos de sprint desde Plane' 5) fetch_github_metrics \u2192 'Obteniendo m\u00e9tricas de c\u00f3digo desde GitHub'. Agregar transiciones CSS (transition-all) para que los cambios de estado de cada paso sean suaves. Los mensajes de error deben ser descriptivos: 'No se pudieron obtener las m\u00e9tricas de Plane. Se usar\u00e1n los datos anteriores.' en lugar de mensajes t\u00e9cnicos. Agregar un \u00edcono de check animado (scale-in) cuando un paso se completa exitosamente. Archivos: frontend/components/SyncProgressModal.tsx y frontend/hooks/useSyncProgress.ts (constantes de pasos iniciales).",
+      "acceptanceCriteria": [
+        "Los 5 pasos se muestran con labels en espa\u00f1ol claros y descriptivos",
+        "Los mensajes de error son amigables y en espa\u00f1ol, sin jerga t\u00e9cnica",
+        "Las transiciones entre estados de cada paso son suaves (transition-all duration-300)",
+        "El \u00edcono de check tiene una animaci\u00f3n de entrada (scale-in o similar)",
+        "Los labels son consistentes entre el hook (constantes) y el modal (renderizado)",
+        "Si todos los pasos fallan, se muestra un mensaje general sugiriendo verificar la conexi\u00f3n"
+      ],
+      "storyPoints": 2,
+      "priority": 3,
+      "domain": "frontend",
+      "passes": true,
+      "dependencies": [
+        "SYNC-002",
+        "SYNC-003"
+      ]
+    },
+    {
+      "id": "SYNC-006",
+      "title": "Backend: manejo robusto de errores y timeouts por paso en sync/stream",
+      "description": "Mejorar el endpoint POST /api/sync/stream para manejar robustamente errores y timeouts en cada paso individual de la sincronizaci\u00f3n. Cada paso (fetch_plane_metrics, fetch_plane_projects, fetch_plane_cycles, fetch_github_metrics) debe ejecutarse con un timeout configurable (default 30 segundos por paso) usando asyncio.wait_for. Si un paso falla por timeout o excepci\u00f3n, se debe: 1) Emitir evento SSE con status error y mensaje descriptivo, 2) Registrar el error en el logger con traceback completo, 3) Continuar con el siguiente paso (no abortar toda la sincronizaci\u00f3n). Agregar un paso final de resumen que indique cu\u00e1ntos pasos fueron exitosos y cu\u00e1ntos fallaron. Asegurar que el stream SSE se cierre correctamente incluso si hay una excepci\u00f3n no capturada (usar try/finally en el generador). Archivo: backend/app/routers/sync.py. Considerar que las llamadas a los servicios de Plane y GitHub son async y pueden lanzar httpx.HTTPError, asyncio.TimeoutError, o excepciones gen\u00e9ricas.",
+      "acceptanceCriteria": [
+        "Cada paso tiene un timeout de 30 segundos (configurable)",
+        "Si un paso excede el timeout, se emite error y se contin\u00faa con el siguiente",
+        "Las excepciones de cada paso se capturan individualmente sin abortar el stream",
+        "El logger registra errores con traceback completo para debugging",
+        "El evento final de resumen incluye conteo de pasos exitosos y fallidos",
+        "El stream SSE se cierra correctamente con try/finally incluso ante excepciones no esperadas",
+        "Los errores de red (httpx.HTTPError) se manejan con mensajes descriptivos"
+      ],
+      "storyPoints": 3,
+      "priority": 3,
+      "domain": "backend",
+      "passes": true,
+      "dependencies": [
+        "SYNC-001"
+      ]
+    },
+    {
+      "id": "SYNC-007",
+      "title": "QA: tests para el flujo completo de sincronizaci\u00f3n con progreso",
+      "description": "Escribir tests para validar el flujo completo de sincronizaci\u00f3n con progreso, tanto en backend como frontend. Backend (pytest): 1) Test que POST /api/sync/stream retorna Content-Type text/event-stream, 2) Test que el stream emite eventos para cada paso en orden correcto, 3) Test que un fallo en un servicio emite error para ese paso pero contin\u00faa los dem\u00e1s, 4) Test que el endpoint original POST /api/sync sigue funcionando. Frontend (jest/vitest): 1) Test que useSyncProgress inicializa con 5 pasos en status pending, 2) Test que startSync() parsea eventos SSE y actualiza los pasos, 3) Test que SyncProgressModal renderiza todos los pasos con sus estados correctos, 4) Test que el bot\u00f3n Cerrar solo aparece cuando la sincronizaci\u00f3n termina, 5) Test que click en Sincronizar en FreshnessIndicator abre el modal. Usar mocks para las llamadas de red (httpx para backend, fetch para frontend). Archivos: backend/tests/test_sync_stream.py, frontend/__tests__/SyncProgressModal.test.tsx, frontend/__tests__/useSyncProgress.test.ts.",
+      "acceptanceCriteria": [
+        "Al menos 4 tests de backend que cubran el endpoint SSE de sync/stream",
+        "Al menos 5 tests de frontend que cubran el hook, el modal y la integraci\u00f3n",
+        "Los tests de backend mockean los servicios de Plane y GitHub para no depender de APIs externas",
+        "Los tests de frontend mockean fetch/ReadableStream para simular eventos SSE",
+        "Todos los tests pasan en CI sin requerir servicios externos",
+        "Test espec\u00edfico que valida que un error en un paso no impide los dem\u00e1s",
+        "Test que valida que el endpoint original POST /api/sync no fue afectado"
+      ],
+      "storyPoints": 5,
+      "priority": 4,
+      "domain": "qa",
+      "passes": true,
+      "dependencies": [
+        "SYNC-001",
+        "SYNC-002",
+        "SYNC-003",
+        "SYNC-004"
+      ]
+    }
+  ]
+}

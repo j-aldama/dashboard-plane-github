@@ -1,0 +1,35 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/juanignacioaldama/develop/mio/dashboardRalph/.claude/hooks/ralph_stop.py"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/juanignacioaldama/develop/mio/dashboardRalph/.claude/hooks/log_action.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/juanignacioaldama/develop/mio/dashboardRalph/.claude/hooks/validate_work.py"
+          }
+        ]
+      }
+    ]
+  }
+}

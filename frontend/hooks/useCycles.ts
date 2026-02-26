@@ -6,7 +6,6 @@ export function useCycles() {
   return useQuery<CyclesResponse>({
     queryKey: ["plane", "cycles"],
     queryFn: () => api.get<CyclesResponse>("/api/plane/cycles"),
-    refetchInterval: 5 * 60 * 1000,
   });
 }
 

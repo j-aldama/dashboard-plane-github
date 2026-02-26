@@ -1,0 +1,66 @@
+[2026-02-25T12:47:56.387559] [WARNING] PRD file not found: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/prd.json
+[2026-02-26T10:59:44.700291] [WARNING] PRD file not found: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/prd.json
+[2026-02-26T11:03:23.584217] [WARNING] PRD file not found: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/prd.json
+[2026-02-26T11:11:10.088233] [WARNING] PRD file not found: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/prd.json
+[2026-02-26T11:13:44.804415] [ERROR] Invalid JSON in PRD: Expecting value: line 1 column 1 (char 0)
+[2026-02-26T11:17:12.672381] [INFO] 7 stories remaining. Next: DASH-001
+[2026-02-26T12:05:38.264640] [INFO] 7 stories remaining. Next: DASH-001
+[2026-02-26T12:09:56.145942] [INFO] 7 stories remaining. Next: EXDASH-001
+[2026-02-26T12:14:25.515075] [INFO] 6 stories remaining. Next: EXEC-001
+[2026-02-26T12:15:52.269441] [INFO] 6 stories remaining. Next: EXEC-001
+[2026-02-26T12:17:12.699717] [INFO] 6 stories remaining. Next: EXEC-001
+[2026-02-26T12:19:33.162028] [ERROR] Invalid JSON in PRD: Expecting value: line 1 column 1 (char 0)
+[2026-02-26T12:24:50.767770] [INFO] 7 stories remaining. Next: EXEC-001
+[2026-02-26T12:29:05.828234] [INFO] 7 stories remaining. Next: EXEC-001
+[2026-02-26T12:48:48.513769] [INFO] 7 stories remaining. Next: EXEC-001
+[2026-02-26T12:51:41.536570] [INFO] 7 stories remaining. Next: EXEC-001
+[2026-02-26T13:01:09.663721] [INFO] 5 stories remaining. Next: EXEC-003
+[2026-02-26T13:01:09.664389] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/EXEC-001.json
+[2026-02-26T13:01:09.664554] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/EXEC-002.json
+[2026-02-26T13:07:39.131334] [INFO] 2 stories remaining. Next: EXEC-005
+[2026-02-26T13:07:39.131815] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/EXEC-001.json
+[2026-02-26T13:07:39.131944] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/EXEC-002.json
+[2026-02-26T13:07:39.132137] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/EXEC-003.json
+[2026-02-26T13:07:39.132304] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/EXEC-004.json
+[2026-02-26T13:07:39.132426] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/EXEC-007.json
+[2026-02-26T13:16:06.177302] [SUCCESS] All 7 stories completed!
+[2026-02-26T13:16:06.177969] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/final.json
+[2026-02-26T13:16:53.237642] [SUCCESS] All 7 stories completed!
+[2026-02-26T13:16:53.238019] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/final.json
+[2026-02-26T13:43:11.464647] [SUCCESS] All 7 stories completed!
+[2026-02-26T13:43:11.466109] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/final.json
+[2026-02-26T13:45:15.326393] [SUCCESS] All 7 stories completed!
+[2026-02-26T13:45:15.327086] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/final.json
+[2026-02-26T13:46:11.185796] [SUCCESS] All 7 stories completed!
+[2026-02-26T13:46:11.186649] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/final.json
+[2026-02-26T14:22:29.973940] [SUCCESS] All 7 stories completed!
+[2026-02-26T14:22:29.975314] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/final.json
+[2026-02-26T15:12:02.886333] [SUCCESS] All 7 stories completed!
+[2026-02-26T15:12:02.887020] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/final.json
+[2026-02-26T15:15:38.489707] [SUCCESS] All 7 stories completed!
+[2026-02-26T15:15:38.490632] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/final.json
+[2026-02-26T15:23:51.707632] [SUCCESS] All 7 stories completed!
+[2026-02-26T15:23:51.708321] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/final.json
+[2026-02-26T15:27:09.954002] [SUCCESS] All 7 stories completed!
+[2026-02-26T15:27:09.954757] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/final.json
+[2026-02-26T15:27:51.920336] [SUCCESS] All 7 stories completed!
+[2026-02-26T15:27:51.920995] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/final.json
+[2026-02-26T15:29:26.557475] [SUCCESS] All 7 stories completed!
+[2026-02-26T15:29:26.558358] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/final.json
+[2026-02-26T15:42:05.287765] [SUCCESS] All 7 stories completed!
+[2026-02-26T15:42:05.288606] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/final.json
+[2026-02-26T15:42:43.345651] [SUCCESS] All 7 stories completed!
+[2026-02-26T15:42:43.346422] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/final.json
+[2026-02-26T16:07:19.389617] [SUCCESS] All 7 stories completed!
+[2026-02-26T16:07:19.390295] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/final.json
+[2026-02-26T16:11:15.126245] [SUCCESS] All 7 stories completed!
+[2026-02-26T16:11:15.127015] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/final.json
+[2026-02-26T16:15:02.700254] [SUCCESS] All 7 stories completed!
+[2026-02-26T16:15:02.700974] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/final.json
+[2026-02-26T16:37:30.458217] [ERROR] Invalid JSON in PRD: Expecting value: line 1 column 1 (char 0)
+[2026-02-26T16:43:51.816080] [INFO] 7 stories remaining. Next: SYNC-001
+[2026-02-26T16:48:37.123110] [INFO] 7 stories remaining. Next: SYNC-001
+[2026-02-26T16:58:08.936332] [INFO] 6 stories remaining. Next: SYNC-002
+[2026-02-26T16:58:08.936880] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/SYNC-001.json
+[2026-02-26T16:58:58.127731] [SUCCESS] All 7 stories completed!
+[2026-02-26T16:58:58.128530] [INFO] Checkpoint saved: /Users/juanignacioaldama/develop/mio/dashboardRalph/ralph/checkpoints/final.json

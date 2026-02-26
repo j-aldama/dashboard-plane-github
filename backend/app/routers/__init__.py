@@ -1,3 +1,3 @@
-from app.routers import health, plane, github
+from app.routers import health, plane, github, sync
 
-__all__ = ["health", "plane", "github"]
+__all__ = ["health", "plane", "github", "sync"]
