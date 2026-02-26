@@ -1,8 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useQueryClient, useIsFetching } from "@tanstack/react-query";
 import { useHealth } from "@/hooks/useHealth";
-import { RefreshIcon } from "@/components/icons";
+import { RefreshIcon, CloudSyncIcon } from "@/components/icons";
+import { SyncProgressModal } from "@/components/SyncProgressModal";
+import { useSyncProgress } from "@/hooks/useSyncProgress";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -37,7 +40,13 @@ function formatElapsed(elapsedMin: number): string {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function FreshnessIndicator() {
-  const { data, dataUpdatedAt, refetch, isFetching } = useHealth();
+  const { data, dataUpdatedAt } = useHealth();
+  const queryClient = useQueryClient();
+  const globalFetching = useIsFetching();
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const { steps, isSyncing, overallProgress, startSync, cleanup } =
+    useSyncProgress();
 
   // Tick every 30 s to keep the elapsed label live
   const [, setTick] = useState(0);
@@ -45,6 +54,13 @@ export function FreshnessIndicator() {
     const id = setInterval(() => setTick((n) => n + 1), 30_000);
     return () => clearInterval(id);
   }, []);
+
+  // Cleanup hook resources on unmount
+  useEffect(() => {
+    return () => {
+      cleanup();
+    };
+  }, [cleanup]);
 
   const elapsedMin = dataUpdatedAt ? getElapsedMinutes(dataUpdatedAt) : null;
   const level: FreshnessLevel =
@@ -57,6 +73,23 @@ export function FreshnessIndicator() {
   }, [elapsedMin]);
 
   const apiOk = data?.status === "ok";
+  const isLoading = globalFetching > 0 || isSyncing;
+
+  const handleRefresh = useCallback(() => {
+    queryClient.invalidateQueries();
+  }, [queryClient]);
+
+  const handleSync = useCallback(() => {
+    setIsModalOpen(true);
+    startSync();
+  }, [startSync]);
+
+  const handleCloseModal = useCallback(() => {
+    if (isSyncing) return;
+    setIsModalOpen(false);
+    cleanup();
+    queryClient.invalidateQueries();
+  }, [isSyncing, cleanup, queryClient]);
 
   return (
     <div className="flex items-center gap-3">
@@ -73,19 +106,41 @@ export function FreshnessIndicator() {
         </span>
       </div>
 
-      {/* Refresh button */}
+      {/* Refresh button — re-fetches UI from backend (may use Redis cache) */}
       <button
-        onClick={() => refetch()}
-        disabled={isFetching}
+        onClick={handleRefresh}
+        disabled={isLoading}
         className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-        title="Actualizar datos"
+        title="Actualizar datos (puede usar caché)"
       >
         <RefreshIcon
           size={13}
-          className={isFetching ? "animate-spin" : ""}
+          className={globalFetching > 0 ? "animate-spin" : ""}
         />
         <span className="hidden sm:inline">Actualizar</span>
       </button>
+
+      {/* Sync button — clears Redis cache then re-fetches fresh data from APIs */}
+      <button
+        onClick={handleSync}
+        disabled={isLoading}
+        className="flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-600 shadow-sm transition-colors hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
+        title="Sincronizar — limpia caché y obtiene datos frescos de Plane/GitHub"
+      >
+        <CloudSyncIcon
+          size={13}
+          className={isSyncing ? "animate-spin" : ""}
+        />
+        <span className="hidden sm:inline">Sincronizar</span>
+      </button>
+
+      <SyncProgressModal
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        steps={steps}
+        overallProgress={overallProgress}
+        isSyncing={isSyncing}
+      />
     </div>
   );
 }
