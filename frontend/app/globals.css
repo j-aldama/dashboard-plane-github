@@ -4,53 +4,151 @@
 
 /* ── Executive design tokens ──────────────────────────────────────────────── */
 :root {
-  /* Brand palette */
-  --color-brand-primary: #1e3a5f;
-  --color-brand-accent: #2563eb;
-  --color-brand-light: #eff6ff;
+  /* Brand palette — primary blues */
+  --color-brand-50:  #eff6ff;
+  --color-brand-100: #dbeafe;
+  --color-brand-500: #3b82f6;
+  --color-brand-600: #2563eb;
+  --color-brand-700: #1d4ed8;
+  --color-brand-900: #1e3a5f;
 
-  /* Status colours */
-  --color-status-green: #22c55e;
+  /* Traffic-light status colours */
+  --color-status-green:  #22c55e;
   --color-status-yellow: #eab308;
-  --color-status-red: #ef4444;
-  --color-status-blue: #3b82f6;
+  --color-status-red:    #ef4444;
+  --color-status-blue:   #3b82f6;
 
-  /* Surface */
-  --color-surface-bg: #f8fafc;
-  --color-surface-card: #ffffff;
+  /* Surface palette */
+  --color-surface-bg:     #f8fafc;
+  --color-surface-card:   #ffffff;
   --color-surface-border: #e2e8f0;
 
-  /* Typography */
+  /* Sidebar */
+  --color-sidebar-bg:      #1e293b;
+  --color-sidebar-border:  #334155;
+  --color-sidebar-active:  #2563eb;
+
+  /* Typography scale */
   --font-sans: "Inter", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", Consolas, monospace;
+
+  /* Shadows */
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+  --shadow-card-hover: 0 4px 12px 0 rgb(0 0 0 / 0.10), 0 2px 4px -1px rgb(0 0 0 / 0.06);
 }
 
-/* ── Base styles ──────────────────────────────────────────────────────────── */
+/* ── Base reset ───────────────────────────────────────────────────────────── */
 html,
 body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+  @apply antialiased;
+  background-color: var(--color-surface-bg);
+  color: #0f172a;
   font-family: var(--font-sans);
 }
 
-/* ── Utility classes for executive dashboard ─────────────────────────────── */
+/* Smooth scrolling */
+* {
+  scroll-behavior: smooth;
+}
+
+/* ── Date input browser-quirk fixes ─────────────────────────────────────── */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0.5;
+  cursor: pointer;
+}
+
+/* ── Scrollbar styling ───────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* ── Component layer ─────────────────────────────────────────────────────── */
 @layer components {
+  /* Generic card */
   .card {
-    @apply rounded-xl border border-slate-200 bg-white p-6 shadow-sm;
+    @apply rounded-xl border border-slate-200 bg-white p-6;
+    box-shadow: var(--shadow-card);
+  }
+  .card:hover {
+    box-shadow: var(--shadow-card-hover);
   }
 
+  /* KPI number typography */
+  .kpi-value {
+    @apply text-4xl font-bold tabular-nums tracking-tight text-slate-900;
+  }
+  .kpi-label {
+    @apply text-sm font-medium text-slate-500;
+  }
+
+  /* Status badge variants (used by StatusBadge component) */
   .status-badge-green {
-    @apply inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700;
+    @apply inline-flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700;
   }
-
   .status-badge-yellow {
-    @apply inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-700;
+    @apply inline-flex items-center gap-1.5 rounded-full border border-yellow-200 bg-yellow-50 px-2.5 py-0.5 text-xs font-medium text-yellow-700;
   }
-
   .status-badge-red {
-    @apply inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700;
+    @apply inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700;
+  }
+  .status-badge-blue {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700;
   }
 
-  .status-badge-blue {
-    @apply inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-700;
+  /* Sidebar nav item */
+  .nav-item {
+    @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition-colors duration-150 hover:bg-slate-800 hover:text-white;
+  }
+  .nav-item-active {
+    @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-white shadow-sm;
+    background-color: var(--color-brand-600);
+  }
+
+  /* Section heading */
+  .section-title {
+    @apply text-2xl font-bold tracking-tight text-slate-900;
+  }
+  .section-subtitle {
+    @apply mt-1 text-sm text-slate-500;
+  }
+
+  /* Metric grid */
+  .metric-grid {
+    @apply grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4;
+  }
+
+  /* Shimmer animation (used by Skeleton) */
+  .shimmer {
+    @apply animate-pulse;
+    background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+    background-size: 200% 100%;
+  }
+}
+
+/* ── Utility overrides ───────────────────────────────────────────────────── */
+@layer utilities {
+  /* Sidebar transitions */
+  .sidebar-enter {
+    transform: translateX(-100%);
+  }
+  .sidebar-enter-active {
+    transform: translateX(0);
+    transition: transform 200ms ease-in-out;
+  }
+
+  /* Tabular numbers for metrics */
+  .tabular {
+    font-variant-numeric: tabular-nums;
   }
 }

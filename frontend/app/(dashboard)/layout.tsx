@@ -1,16 +1,16 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { DateRangeProvider, useDateRange } from "@/contexts/DateRangeContext";
-import { useHealth } from "@/hooks/useHealth";
+import { DateRangeProvider } from "@/contexts/DateRangeContext";
+import { DateRangePicker } from "@/components/DateRangePicker";
+import { FreshnessIndicator } from "@/components/FreshnessIndicator";
 import {
   LayoutDashboardIcon,
   FolderKanbanIcon,
   UsersIcon,
   BarChart3Icon,
-  RefreshIcon,
   MenuIcon,
   XIcon,
 } from "@/components/icons";
@@ -22,100 +22,27 @@ const navLinks = [
     href: "/overview",
     label: "Vista General",
     Icon: LayoutDashboardIcon,
+    description: "KPIs del equipo",
   },
   {
     href: "/projects",
     label: "Por Proyecto",
     Icon: FolderKanbanIcon,
+    description: "Estado de proyectos",
   },
   {
     href: "/person",
     label: "Por Persona",
     Icon: UsersIcon,
+    description: "Métricas individuales",
   },
   {
     href: "/comparative",
     label: "Comparativa",
     Icon: BarChart3Icon,
+    description: "Comparar miembros",
   },
 ];
-
-// ── Freshness indicator ────────────────────────────────────────────────────────
-
-function FreshnessIndicator() {
-  const { data, dataUpdatedAt, refetch, isFetching } = useHealth();
-
-  const formatElapsed = useCallback(() => {
-    if (!dataUpdatedAt) return "—";
-    const diffMs = Date.now() - dataUpdatedAt;
-    const diffMin = Math.floor(diffMs / 60000);
-    if (diffMin < 1) return "hace menos de 1 min";
-    if (diffMin === 1) return "hace 1 min";
-    return `hace ${diffMin} min`;
-  }, [dataUpdatedAt]);
-
-  const statusOk = data?.status === "ok";
-
-  return (
-    <div className="flex items-center gap-3">
-      <div className="hidden items-center gap-2 text-xs text-slate-400 sm:flex">
-        <span
-          className={`h-2 w-2 rounded-full ${statusOk ? "bg-green-400" : "bg-slate-300"}`}
-        />
-        <span>Última actualización: {formatElapsed()}</span>
-      </div>
-      <button
-        onClick={() => refetch()}
-        disabled={isFetching}
-        className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-50"
-        title="Actualizar datos"
-      >
-        <RefreshIcon
-          size={13}
-          className={isFetching ? "animate-spin" : ""}
-        />
-        <span className="hidden sm:inline">Actualizar</span>
-      </button>
-    </div>
-  );
-}
-
-// ── Date range picker ──────────────────────────────────────────────────────────
-
-function formatDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
-function DateRangePicker() {
-  const { dateRange, setDateRange } = useDateRange();
-
-  return (
-    <div className="flex items-center gap-2">
-      <label className="hidden text-xs font-medium text-slate-500 sm:block">
-        Período:
-      </label>
-      <input
-        type="date"
-        value={formatDate(dateRange.from)}
-        max={formatDate(dateRange.to)}
-        onChange={(e) =>
-          setDateRange({ ...dateRange, from: new Date(e.target.value) })
-        }
-        className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-      />
-      <span className="text-xs text-slate-400">→</span>
-      <input
-        type="date"
-        value={formatDate(dateRange.to)}
-        min={formatDate(dateRange.from)}
-        onChange={(e) =>
-          setDateRange({ ...dateRange, to: new Date(e.target.value) })
-        }
-        className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-      />
-    </div>
-  );
-}
 
 // ── Sidebar ────────────────────────────────────────────────────────────────────
 
@@ -132,30 +59,51 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
       {/* Mobile overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 z-20 bg-black/40 lg:hidden"
+          className="fixed inset-0 z-20 bg-black/50 backdrop-blur-sm lg:hidden"
           onClick={onClose}
+          aria-hidden="true"
         />
       )}
 
       {/* Sidebar panel */}
       <aside
-        className={`fixed inset-y-0 left-0 z-30 flex w-60 flex-col bg-slate-900 transition-transform duration-200 lg:static lg:z-auto lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-30 flex w-64 flex-col bg-slate-900 shadow-xl transition-transform duration-200 lg:static lg:z-auto lg:translate-x-0 lg:shadow-none ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        {/* Logo */}
-        <div className="flex h-16 items-center justify-between px-5 border-b border-slate-700">
-          <div>
-            <span className="text-base font-bold text-white leading-tight">
-              Executive
-            </span>
-            <br />
-            <span className="text-xs font-medium text-slate-400 tracking-widest uppercase">
-              Dashboard
-            </span>
+        {/* Logo / branding */}
+        <div className="flex h-16 flex-shrink-0 items-center justify-between border-b border-slate-700/80 px-5">
+          <div className="flex items-center gap-2.5">
+            {/* Icon mark */}
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 shadow-md shadow-blue-900/40">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="white"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect x="3" y="3" width="7" height="7" rx="1" />
+                <rect x="14" y="3" width="7" height="7" rx="1" />
+                <rect x="3" y="14" width="7" height="7" rx="1" />
+                <rect x="14" y="14" width="7" height="7" rx="1" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-bold leading-tight text-white">
+                Executive
+              </p>
+              <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-slate-400">
+                Dashboard
+              </p>
+            </div>
           </div>
+
           <button
-            className="text-slate-400 hover:text-white lg:hidden"
+            className="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white lg:hidden"
             onClick={onClose}
             aria-label="Cerrar menú"
           >
@@ -164,23 +112,45 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-4 px-3">
+        <nav className="flex-1 overflow-y-auto px-3 py-4">
+          <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+            Vistas
+          </p>
           <ul className="space-y-0.5">
-            {navLinks.map(({ href, label, Icon }) => {
-              const active = pathname === href || pathname.startsWith(href + "/");
+            {navLinks.map(({ href, label, description, Icon }) => {
+              const active =
+                pathname === href || pathname.startsWith(href + "/");
               return (
                 <li key={href}>
                   <Link
                     href={href}
                     onClick={onClose}
-                    className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                    className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-150 ${
                       active
-                        ? "bg-brand-600 text-white shadow-sm"
+                        ? "bg-blue-600 text-white shadow-sm shadow-blue-900/30"
                         : "text-slate-300 hover:bg-slate-800 hover:text-white"
                     }`}
                   >
-                    <Icon size={18} />
-                    {label}
+                    <Icon
+                      size={18}
+                      className={`flex-shrink-0 ${
+                        active
+                          ? "text-white"
+                          : "text-slate-400 group-hover:text-slate-200"
+                      }`}
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium leading-tight">
+                        {label}
+                      </p>
+                      <p
+                        className={`truncate text-[11px] leading-tight ${
+                          active ? "text-blue-200" : "text-slate-500"
+                        }`}
+                      >
+                        {description}
+                      </p>
+                    </div>
                   </Link>
                 </li>
               );
@@ -189,10 +159,11 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
         </nav>
 
         {/* Footer */}
-        <div className="border-t border-slate-700 px-5 py-3">
-          <p className="text-xs text-slate-500">
-            Plane + GitHub Integration
-          </p>
+        <div className="border-t border-slate-700/80 px-5 py-4">
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-green-400 shadow-sm shadow-green-400/50" />
+            <p className="text-xs text-slate-500">Plane + GitHub</p>
+          </div>
         </div>
       </aside>
     </>
@@ -203,31 +174,53 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
 
 function DashboardShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const pathname = usePathname();
+
+  // Page title for header breadcrumb
+  const currentNav = navLinks.find(
+    (n) => pathname === n.href || pathname.startsWith(n.href + "/"),
+  );
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* Main area */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Header */}
-        <header className="flex h-16 flex-shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6 shadow-sm">
-          <div className="flex items-center gap-4">
+        <header className="flex h-16 flex-shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm sm:px-6">
+          <div className="flex min-w-0 items-center gap-4">
+            {/* Mobile hamburger */}
             <button
-              className="text-slate-400 hover:text-slate-600 lg:hidden"
+              className="flex-shrink-0 rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 lg:hidden"
               onClick={() => setSidebarOpen(true)}
               aria-label="Abrir menú"
             >
               <MenuIcon size={20} />
             </button>
+
+            {/* Page title (visible lg+) */}
+            {currentNav && (
+              <div className="hidden items-center gap-2 lg:flex">
+                <span className="text-sm font-medium text-slate-400">
+                  {currentNav.description}
+                </span>
+              </div>
+            )}
+
+            {/* Date range picker */}
             <DateRangePicker />
           </div>
+
+          {/* Right side */}
           <FreshnessIndicator />
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
-          {children}
+        <main className="flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-screen-2xl p-4 sm:p-6">
+            {children}
+          </div>
         </main>
       </div>
     </div>
