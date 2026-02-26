@@ -9,7 +9,7 @@ import logging
 from datetime import date, datetime, timezone
 
 import httpx
-from sqlalchemy import select, desc
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -36,7 +36,8 @@ CACHE_KEY_RATE_LIMIT = "github:rate_limit"
 _GITHUB_API_BASE = "https://api.github.com"
 _PER_PAGE = 100
 _REQUEST_TIMEOUT = 30.0
-_CACHE_TTL = 600  # 10 minutes
+_CACHE_TTL = 600  # 10 minutes — respects GitHub's 5000 req/hour rate limit
+_RATE_LIMIT_CACHE_TTL = 60  # 1 minute for rate limit endpoint
 
 
 class GitHubAPIError(Exception):
@@ -67,10 +68,13 @@ class GitHubService:
     # Low-level HTTP helpers
     # ------------------------------------------------------------------
 
-    async def _get_paginated(self, url: str, params: dict | None = None) -> list[dict]:
+    async def _get_paginated(
+        self, url: str, params: dict | None = None
+    ) -> list[dict]:
         """Perform paginated GET requests using GitHub's Link header pagination.
 
         Automatically follows ``rel="next"`` links until all pages are consumed.
+        Handles rate-limit 403 and returns cached/snapshot data upstream.
         """
         all_results: list[dict] = []
         request_params = dict(params or {})
@@ -84,9 +88,13 @@ class GitHubService:
                 response = await client.get(next_url, params=request_params)
 
                 if response.status_code == 403:
-                    # Likely rate-limited
+                    remaining = response.headers.get("x-ratelimit-remaining")
+                    if remaining == "0":
+                        raise GitHubAPIError(
+                            "GitHub API rate limit exceeded"
+                        )
                     raise GitHubAPIError(
-                        f"GitHub API returned 403 — possible rate limit exceeded"
+                        "GitHub API returned 403 — access denied"
                     )
                 if response.status_code == 404:
                     logger.warning("GitHub 404 for %s — skipping", next_url)
@@ -100,13 +108,14 @@ class GitHubService:
                 if isinstance(data, list):
                     all_results.extend(data)
                 elif isinstance(data, dict) and "items" in data:
-                    # Search API wraps results in {"items": [...]}
                     all_results.extend(data["items"])
                 else:
                     all_results.append(data)
 
                 # Parse Link header for next page
-                next_url = self._parse_next_link(response.headers.get("link", ""))
+                next_url = self._parse_next_link(
+                    response.headers.get("link", "")
+                )
                 # After the first request, params are embedded in next_url
                 request_params = {}
 
@@ -118,6 +127,15 @@ class GitHubService:
             headers=self._headers, timeout=_REQUEST_TIMEOUT
         ) as client:
             response = await client.get(url)
+            if response.status_code == 403:
+                remaining = response.headers.get("x-ratelimit-remaining")
+                if remaining == "0":
+                    raise GitHubAPIError(
+                        "GitHub API rate limit exceeded"
+                    )
+                raise GitHubAPIError(
+                    "GitHub API returned 403 — access denied"
+                )
             if response.status_code != 200:
                 raise GitHubAPIError(
                     f"GitHub API returned {response.status_code} for {url}"
@@ -132,7 +150,6 @@ class GitHubService:
         for part in link_header.split(","):
             part = part.strip()
             if 'rel="next"' in part:
-                # Format: <https://api.github.com/...?page=2>; rel="next"
                 url_part = part.split(";")[0].strip()
                 if url_part.startswith("<") and url_part.endswith(">"):
                     return url_part[1:-1]
@@ -167,18 +184,26 @@ class GitHubService:
     # ------------------------------------------------------------------
 
     async def _get_github_team_map(self) -> dict[str, TeamMember]:
-        """Return a map of github_username -> TeamMember from the database."""
-        stmt = select(TeamMember).where(TeamMember.github_username.isnot(None))
+        """Return a map of github_username (lowered) -> TeamMember from the DB."""
+        stmt = select(TeamMember).where(
+            TeamMember.github_username.isnot(None)
+        )
         result = await self._db.execute(stmt)
         members = result.scalars().all()
-        return {m.github_username.lower(): m for m in members if m.github_username}
+        return {
+            m.github_username.lower(): m
+            for m in members
+            if m.github_username
+        }
 
     # ------------------------------------------------------------------
-    # Public API — team metrics
+    # Public API -- team metrics
     # ------------------------------------------------------------------
 
     async def get_team_metrics(
-        self, period_start: date | None = None, period_end: date | None = None
+        self,
+        period_start: date | None = None,
+        period_end: date | None = None,
     ) -> TeamGitHubMetricsResponse:
         """Fetch aggregated per-member GitHub metrics.
 
@@ -203,14 +228,19 @@ class GitHubService:
             )
         except Exception as exc:
             logger.warning("GitHub API error fetching team metrics: %s", exc)
-            return await self._team_metrics_from_snapshot(period_start, period_end)
+            return await self._team_metrics_from_snapshot(
+                period_start, period_end
+            )
 
     # ------------------------------------------------------------------
-    # Public API — member detail
+    # Public API -- member detail
     # ------------------------------------------------------------------
 
     async def get_member_detail(
-        self, username: str, period_start: date | None = None, period_end: date | None = None
+        self,
+        username: str,
+        period_start: date | None = None,
+        period_end: date | None = None,
     ) -> MemberDetailResponse:
         """Fetch detailed metrics + history for a single GitHub user."""
         start_str = period_start.isoformat() if period_start else "none"
@@ -229,12 +259,14 @@ class GitHubService:
             )
         except Exception as exc:
             logger.warning(
-                "GitHub API error fetching member detail for %s: %s", username, exc
+                "GitHub API error fetching member detail for %s: %s",
+                username,
+                exc,
             )
             return await self._member_detail_from_snapshot(username)
 
     # ------------------------------------------------------------------
-    # Public API — rate limit
+    # Public API -- rate limit
     # ------------------------------------------------------------------
 
     async def get_rate_limit(self) -> RateLimitResponse:
@@ -244,8 +276,12 @@ class GitHubService:
             return RateLimitResponse(**cached)
 
         try:
-            data = await self._get_single(f"{_GITHUB_API_BASE}/rate_limit")
-            core = data.get("rate", data.get("resources", {}).get("core", {}))
+            data = await self._get_single(
+                f"{_GITHUB_API_BASE}/rate_limit"
+            )
+            core = data.get(
+                "rate", data.get("resources", {}).get("core", {})
+            )
             reset_ts = core.get("reset")
             reset_at = (
                 datetime.fromtimestamp(reset_ts, tz=timezone.utc)
@@ -258,11 +294,10 @@ class GitHubService:
                 used=core.get("used", 0),
                 reset_at=reset_at,
             )
-            # Cache for 60 seconds — lightweight, but avoids hammering the endpoint
             await cache_set(
                 CACHE_KEY_RATE_LIMIT,
                 result.model_dump(mode="json"),
-                60,
+                _RATE_LIMIT_CACHE_TTL,
             )
             return result
         except Exception as exc:
@@ -279,7 +314,13 @@ class GitHubService:
         period_end: date | None,
         cache_key: str,
     ) -> TeamGitHubMetricsResponse:
-        """Fetch PRs, commits, and line stats from the GitHub API."""
+        """Fetch PRs, commits, and line stats from the GitHub API.
+
+        Uses:
+        - /repos/{owner}/{repo}/pulls?state=all  for PR counts
+        - /repos/{owner}/{repo}/commits            for commit counts
+        - /repos/{owner}/{repo}/stats/contributors  for line stats (efficient)
+        """
         repos = await self._get_org_repos()
         team_map = await self._get_github_team_map()
 
@@ -293,11 +334,16 @@ class GitHubService:
             await self._collect_commit_metrics(
                 repo_full_name, member_data, period_start, period_end
             )
+            await self._collect_contributor_line_stats(
+                repo_full_name, member_data, period_start, period_end
+            )
 
         # Build schema objects and attach team mapping
         members_out: list[GitHubMemberMetrics] = []
         for username_lower, data in member_data.items():
             tm = team_map.get(username_lower)
+            lines_added = data.get("lines_added", 0)
+            lines_removed = data.get("lines_removed", 0)
             members_out.append(
                 GitHubMemberMetrics(
                     username=data["username"],
@@ -307,9 +353,9 @@ class GitHubService:
                     prs_merged=data.get("prs_merged", 0),
                     prs_rejected=data.get("prs_rejected", 0),
                     commits_total=data.get("commits_total", 0),
-                    lines_added=data.get("lines_added", 0),
-                    lines_removed=data.get("lines_removed", 0),
-                    lines_net=data.get("lines_added", 0) - data.get("lines_removed", 0),
+                    lines_added=lines_added,
+                    lines_removed=lines_removed,
+                    lines_net=lines_added - lines_removed,
                     team_member_id=tm.id if tm else None,
                     plane_member_id=tm.plane_member_id if tm else None,
                 )
@@ -327,8 +373,10 @@ class GitHubService:
             is_cached=False,
         )
 
-        # Cache with 10 min TTL
-        await cache_set(cache_key, result.model_dump(mode="json"), _CACHE_TTL)
+        # Cache with 10 min TTL to respect GitHub rate limits
+        await cache_set(
+            cache_key, result.model_dump(mode="json"), _CACHE_TTL
+        )
 
         # Persist snapshot to PostgreSQL
         await self._save_team_metrics_snapshot(
@@ -344,8 +392,11 @@ class GitHubService:
         period_end: date | None,
         cache_key: str,
     ) -> MemberDetailResponse:
-        """Fetch detailed metrics for a single member from the API."""
-        # Re-use team metrics and filter
+        """Fetch detailed metrics for a single member from the API.
+
+        Leverages get_team_metrics (which may hit Redis cache) and filters
+        to the requested user.  Includes historical snapshots from PostgreSQL.
+        """
         team_response = await self.get_team_metrics(period_start, period_end)
         member: GitHubMemberMetrics | None = None
         for m in team_response.members:
@@ -353,7 +404,7 @@ class GitHubService:
                 member = m
                 break
 
-        # Load snapshot history
+        # Load snapshot history from PostgreSQL
         history = await self._load_member_history(username)
 
         now = _utcnow()
@@ -375,7 +426,9 @@ class GitHubService:
             is_cached=False,
         )
 
-        await cache_set(cache_key, result.model_dump(mode="json"), _CACHE_TTL)
+        await cache_set(
+            cache_key, result.model_dump(mode="json"), _CACHE_TTL
+        )
         return result
 
     # ------------------------------------------------------------------
@@ -389,9 +442,16 @@ class GitHubService:
         period_start: date | None,
         period_end: date | None,
     ) -> None:
-        """Fetch all pull requests for a repo and aggregate by author."""
+        """Fetch all pull requests for a repo and aggregate by author.
+
+        Handles pagination via Link header for repos with >100 PRs.
+        """
         url = f"{_GITHUB_API_BASE}/repos/{repo_full_name}/pulls"
-        params: dict = {"state": "all", "sort": "updated", "direction": "desc"}
+        params: dict = {
+            "state": "all",
+            "sort": "updated",
+            "direction": "desc",
+        }
 
         prs = await self._get_paginated(url, params)
 
@@ -418,31 +478,113 @@ class GitHubService:
 
             if merged_at:
                 entry["prs_merged"] += 1
-                # Fetch line stats from the PR detail (additions/deletions)
-                await self._collect_pr_lines(
-                    repo_full_name, pr.get("number"), entry
-                )
             elif state == "closed":
-                # Closed but not merged = rejected
                 entry["prs_rejected"] += 1
             elif state == "open":
                 entry["prs_open"] += 1
 
-    async def _collect_pr_lines(
-        self, repo_full_name: str, pr_number: int | None, entry: dict
+    # ------------------------------------------------------------------
+    # Contributor line stats (efficient aggregate endpoint)
+    # ------------------------------------------------------------------
+
+    async def _collect_contributor_line_stats(
+        self,
+        repo_full_name: str,
+        member_data: dict[str, dict],
+        period_start: date | None,
+        period_end: date | None,
     ) -> None:
-        """Fetch additions/deletions from the PR detail endpoint."""
-        if pr_number is None:
-            return
+        """Fetch line addition/deletion stats from the contributor stats endpoint.
+
+        Uses GET /repos/{owner}/{repo}/stats/contributors which returns
+        weekly breakdowns per author.  This is far more efficient than
+        fetching individual PR details — a single call per repo regardless
+        of how many PRs exist.
+
+        Note: GitHub may return 202 (computing) on first call. In that case
+        we skip line stats for this repo rather than blocking.
+        """
+        url = (
+            f"{_GITHUB_API_BASE}/repos/{repo_full_name}/stats/contributors"
+        )
         try:
-            url = f"{_GITHUB_API_BASE}/repos/{repo_full_name}/pulls/{pr_number}"
-            data = await self._get_single(url)
-            entry["lines_added"] += data.get("additions", 0)
-            entry["lines_removed"] += data.get("deletions", 0)
+            async with httpx.AsyncClient(
+                headers=self._headers, timeout=_REQUEST_TIMEOUT
+            ) as client:
+                response = await client.get(url)
+
+                if response.status_code == 202:
+                    # GitHub is computing stats, data not ready yet
+                    logger.info(
+                        "Contributor stats for %s are being computed (202), "
+                        "skipping line stats this time",
+                        repo_full_name,
+                    )
+                    return
+                if response.status_code == 204:
+                    # Empty repository, no stats
+                    return
+                if response.status_code == 403:
+                    remaining = response.headers.get(
+                        "x-ratelimit-remaining"
+                    )
+                    if remaining == "0":
+                        raise GitHubAPIError(
+                            "GitHub API rate limit exceeded"
+                        )
+                    logger.warning(
+                        "403 fetching contributor stats for %s",
+                        repo_full_name,
+                    )
+                    return
+                if response.status_code != 200:
+                    logger.warning(
+                        "Unexpected %s from contributor stats for %s",
+                        response.status_code,
+                        repo_full_name,
+                    )
+                    return
+
+                contributors = response.json()
+                if not isinstance(contributors, list):
+                    return
+
+            # Convert period boundaries to Unix timestamps for week filtering
+            start_ts = _date_to_unix(period_start) if period_start else None
+            end_ts = _date_to_unix(period_end) if period_end else None
+
+            for contributor in contributors:
+                author = contributor.get("author") or {}
+                login = author.get("login", "")
+                if not login:
+                    continue
+
+                weeks = contributor.get("weeks", [])
+                total_added = 0
+                total_deleted = 0
+
+                for week in weeks:
+                    week_start = week.get("w", 0)
+                    # Each week entry covers 7 days starting from "w"
+                    if start_ts and week_start + 604800 < start_ts:
+                        continue
+                    if end_ts and week_start > end_ts:
+                        continue
+                    total_added += week.get("a", 0)
+                    total_deleted += week.get("d", 0)
+
+                if total_added > 0 or total_deleted > 0:
+                    entry = self._ensure_member_entry(
+                        member_data, login, author
+                    )
+                    entry["lines_added"] += total_added
+                    entry["lines_removed"] += total_deleted
+
+        except GitHubAPIError:
+            raise
         except Exception as exc:
-            logger.debug(
-                "Could not fetch PR #%s line stats for %s: %s",
-                pr_number,
+            logger.warning(
+                "Could not fetch contributor stats for %s: %s",
                 repo_full_name,
                 exc,
             )
@@ -458,7 +600,10 @@ class GitHubService:
         period_start: date | None,
         period_end: date | None,
     ) -> None:
-        """Fetch commits for a repo and count per author."""
+        """Fetch commits for a repo and count per author.
+
+        Uses the ``since`` and ``until`` params for server-side date filtering.
+        """
         url = f"{_GITHUB_API_BASE}/repos/{repo_full_name}/commits"
         params: dict = {}
         if period_start:
@@ -486,24 +631,35 @@ class GitHubService:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _compute_rankings(members: list[GitHubMemberMetrics]) -> Rankings:
+    def _compute_rankings(
+        members: list[GitHubMemberMetrics],
+    ) -> Rankings:
         """Build sorted rankings for PRs merged, commits, and net lines."""
         if not members:
             return Rankings()
 
-        by_prs = sorted(members, key=lambda m: m.prs_merged, reverse=True)
-        by_commits = sorted(members, key=lambda m: m.commits_total, reverse=True)
-        by_lines = sorted(members, key=lambda m: m.lines_net, reverse=True)
+        by_prs = sorted(
+            members, key=lambda m: m.prs_merged, reverse=True
+        )
+        by_commits = sorted(
+            members, key=lambda m: m.commits_total, reverse=True
+        )
+        by_lines = sorted(
+            members, key=lambda m: m.lines_net, reverse=True
+        )
 
         return Rankings(
             by_prs_merged=[
-                RankingEntry(username=m.username, value=m.prs_merged) for m in by_prs
+                RankingEntry(username=m.username, value=m.prs_merged)
+                for m in by_prs
             ],
             by_commits=[
-                RankingEntry(username=m.username, value=m.commits_total) for m in by_commits
+                RankingEntry(username=m.username, value=m.commits_total)
+                for m in by_commits
             ],
             by_lines_net=[
-                RankingEntry(username=m.username, value=m.lines_net) for m in by_lines
+                RankingEntry(username=m.username, value=m.lines_net)
+                for m in by_lines
             ],
         )
 
@@ -580,7 +736,9 @@ class GitHubService:
 
             await self._db.commit()
         except Exception as exc:
-            logger.warning("Failed to save GitHub metrics snapshot: %s", exc)
+            logger.warning(
+                "Failed to save GitHub metrics snapshot: %s", exc
+            )
             await self._db.rollback()
 
     # ------------------------------------------------------------------
@@ -588,7 +746,9 @@ class GitHubService:
     # ------------------------------------------------------------------
 
     async def _team_metrics_from_snapshot(
-        self, period_start: date | None, period_end: date | None
+        self,
+        period_start: date | None,
+        period_end: date | None,
     ) -> TeamGitHubMetricsResponse:
         """Load latest team metrics from PostgreSQL snapshots."""
         stmt = (
@@ -626,7 +786,11 @@ class GitHubService:
             lines_removed = snap.lines_deleted or 0
             members_out.append(
                 GitHubMemberMetrics(
-                    username=tm.github_username if tm and tm.github_username else str(tm_id),
+                    username=(
+                        tm.github_username
+                        if tm and tm.github_username
+                        else str(tm_id)
+                    ),
                     name=tm.name if tm else None,
                     avatar_url=tm.avatar_url if tm else None,
                     prs_open=snap.prs_opened or 0,
@@ -647,7 +811,9 @@ class GitHubService:
         return TeamGitHubMetricsResponse(
             members=members_out,
             rankings=rankings,
-            period_start=period_start.isoformat() if period_start else None,
+            period_start=(
+                period_start.isoformat() if period_start else None
+            ),
             period_end=period_end.isoformat() if period_end else None,
             last_updated=datetime.combine(
                 last_date, datetime.min.time(), tzinfo=timezone.utc
@@ -659,7 +825,9 @@ class GitHubService:
         self, username: str
     ) -> MemberDetailResponse:
         """Load member detail from the latest snapshot as a fallback."""
-        tm_stmt = select(TeamMember).where(TeamMember.github_username == username)
+        tm_stmt = select(TeamMember).where(
+            TeamMember.github_username == username
+        )
         tm_result = await self._db.execute(tm_stmt)
         tm = tm_result.scalar_one_or_none()
 
@@ -711,14 +879,20 @@ class GitHubService:
             team_member_id=tm.id,
             plane_member_id=tm.plane_member_id,
             last_updated=datetime.combine(
-                snap.snapshot_date, datetime.min.time(), tzinfo=timezone.utc
+                snap.snapshot_date,
+                datetime.min.time(),
+                tzinfo=timezone.utc,
             ),
             is_cached=False,
         )
 
-    async def _load_member_history(self, username: str) -> list[dict]:
+    async def _load_member_history(
+        self, username: str
+    ) -> list[dict]:
         """Load snapshot history for a member, most recent first."""
-        tm_stmt = select(TeamMember).where(TeamMember.github_username == username)
+        tm_stmt = select(TeamMember).where(
+            TeamMember.github_username == username
+        )
         tm_result = await self._db.execute(tm_stmt)
         tm = tm_result.scalar_one_or_none()
         if tm is None:
@@ -742,9 +916,18 @@ class GitHubService:
                 "commits_count": row.commits_count or 0,
                 "lines_added": row.lines_added or 0,
                 "lines_removed": row.lines_deleted or 0,
-                "lines_net": (row.lines_added or 0) - (row.lines_deleted or 0),
-                "period_start": row.period_start.isoformat() if row.period_start else None,
-                "period_end": row.period_end.isoformat() if row.period_end else None,
+                "lines_net": (row.lines_added or 0)
+                - (row.lines_deleted or 0),
+                "period_start": (
+                    row.period_start.isoformat()
+                    if row.period_start
+                    else None
+                ),
+                "period_end": (
+                    row.period_end.isoformat()
+                    if row.period_end
+                    else None
+                ),
             }
             for row in rows
         ]
@@ -767,3 +950,12 @@ def _parse_iso_date(value: str | None) -> date | None:
         return date.fromisoformat(value[:10])
     except (ValueError, TypeError):
         return None
+
+
+def _date_to_unix(d: date) -> int:
+    """Convert a date to a Unix timestamp (start of day UTC)."""
+    return int(
+        datetime.combine(
+            d, datetime.min.time(), tzinfo=timezone.utc
+        ).timestamp()
+    )
