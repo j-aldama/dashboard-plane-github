@@ -2,7 +2,9 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
+import { FilterProvider } from '@/contexts/FilterContext';
+import { FilterBar } from '@/components/FilterBar';
 
 const navLinks = [
   {
@@ -175,10 +177,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
         </header>
 
-        {/* Page content */}
-        <main className="flex-1 overflow-y-auto">
-          {children}
-        </main>
+        {/* Filter bar + Page content */}
+        <Suspense fallback={null}>
+          <FilterProvider>
+            <FilterBar />
+            <main className="flex-1 overflow-y-auto">
+              {children}
+            </main>
+          </FilterProvider>
+        </Suspense>
       </div>
     </div>
   );
