@@ -10,6 +10,10 @@ from sqlalchemy import text
 from app.config import settings
 from app.database import engine
 from app.routers import health
+from app.routers import sync_members
+from app.routers import sync_projects
+from app.routers import metrics_plane
+from app.routers import metrics_github
 
 logger = logging.getLogger(__name__)
 
@@ -59,3 +63,7 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 
 
 app.include_router(health.router, prefix="/api")
+app.include_router(sync_members.router, prefix="/api")
+app.include_router(sync_projects.router, prefix="/api")
+app.include_router(metrics_plane.router)
+app.include_router(metrics_github.router)
