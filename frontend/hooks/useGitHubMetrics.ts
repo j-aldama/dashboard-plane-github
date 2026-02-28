@@ -1,45 +1,108 @@
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
-import { GithubMetricsSnapshot } from "@/types";
-import { useDateRange } from "@/contexts/DateRangeContext";
+'use client';
+import { useQuery } from '@tanstack/react-query';
+import { apiGet } from '@/lib/api';
+import { useFilters, buildApiParams } from '@/hooks/useFilters';
 
-// ── Hooks ──────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// Types — overview
+// ---------------------------------------------------------------------------
 
-/**
- * Fetch GitHub metrics snapshots for a team member, filtered by date range.
- */
-export function useGitHubMetricsForMember(memberId: number) {
-  const { dateRange } = useDateRange();
+export interface GitHubOverview {
+  total_commits: number;
+  total_prs: number;
+  prs_merged: number;
+  lines_added: number;
+  lines_removed: number;
+}
 
-  const from = dateRange.from.toISOString().slice(0, 10);
-  const to = dateRange.to.toISOString().slice(0, 10);
+// ---------------------------------------------------------------------------
+// Types — activity (temporal)
+// ---------------------------------------------------------------------------
 
-  return useQuery<GithubMetricsSnapshot[]>({
-    queryKey: ["github-metrics", "member", memberId, from, to],
+export interface ActivityPoint {
+  date: string;   // ISO date string, e.g. "2024-01-15"
+  commits: number;
+}
+
+export interface GitHubActivity {
+  activity: ActivityPoint[];
+}
+
+// ---------------------------------------------------------------------------
+// Types — by repository
+// ---------------------------------------------------------------------------
+
+export interface RepoMetrics {
+  repo: string;
+  commits: number;
+  pull_requests: number;
+  lines_added: number;
+  lines_removed: number;
+}
+
+export interface GitHubByRepo {
+  repos: RepoMetrics[];
+}
+
+// ---------------------------------------------------------------------------
+// Types — by user
+// ---------------------------------------------------------------------------
+
+export interface UserMetrics {
+  user_id: string;
+  display_name: string;
+  github_username: string | null;
+  commits: number;
+  pull_requests: number;
+  prs_merged: number;
+  lines_added: number;
+  lines_removed: number;
+}
+
+export interface GitHubByUser {
+  users: UserMetrics[];
+}
+
+// ---------------------------------------------------------------------------
+// Hooks
+// ---------------------------------------------------------------------------
+
+export function useGitHubOverview() {
+  const { toQueryParams } = useFilters();
+  const params = toQueryParams();
+  return useQuery({
+    queryKey: ['github-overview', params],
     queryFn: () =>
-      api.get<GithubMetricsSnapshot[]>(
-        `/metrics/github/${memberId}?from=${from}&to=${to}`,
-      ),
-    staleTime: 4 * 60 * 1000,       // 4 minutes
-    enabled: memberId > 0,
+      apiGet<GitHubOverview>('/metrics/github/overview', buildApiParams({}, params)),
   });
 }
 
-/**
- * Fetch GitHub metrics for all members (team overview), filtered by date range.
- */
-export function useGitHubMetricsOverview() {
-  const { dateRange } = useDateRange();
-
-  const from = dateRange.from.toISOString().slice(0, 10);
-  const to = dateRange.to.toISOString().slice(0, 10);
-
-  return useQuery<GithubMetricsSnapshot[]>({
-    queryKey: ["github-metrics", "overview", from, to],
+export function useGitHubActivity() {
+  const { toQueryParams } = useFilters();
+  const params = toQueryParams();
+  return useQuery({
+    queryKey: ['github-activity', params],
     queryFn: () =>
-      api.get<GithubMetricsSnapshot[]>(
-        `/metrics/github?from=${from}&to=${to}`,
-      ),
-    staleTime: 4 * 60 * 1000,
+      apiGet<GitHubActivity>('/metrics/github/activity', buildApiParams({}, params)),
+  });
+}
+
+export function useGitHubByRepo() {
+  const { toQueryParams } = useFilters();
+  const params = toQueryParams();
+  return useQuery({
+    queryKey: ['github-by-repo', params],
+    queryFn: () =>
+      apiGet<GitHubByRepo>('/metrics/github/by-repo', buildApiParams({}, params)),
+  });
+}
+
+export function useGitHubByUser() {
+  const { toQueryParams } = useFilters();
+  const params = toQueryParams();
+  return useQuery({
+    queryKey: ['github-by-user', params],
+    queryFn: () =>
+      apiGet<GitHubByUser>('/metrics/github/by-user', buildApiParams({}, params)),
   });
 }
