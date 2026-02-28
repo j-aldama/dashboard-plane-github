@@ -1,53 +1,95 @@
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
-import { useDateRange } from "@/contexts/DateRangeContext";
-import {
-  PlaneTeamResponse,
-  GitHubTeamResponse,
-  GitHubMemberDetail,
-} from "@/types/projects";
+'use client';
+import { useQuery } from '@tanstack/react-query';
+import { apiGet } from '@/lib/api';
+import { useFilters, buildApiParams } from '@/hooks/useFilters';
 
-/**
- * Fetch Plane team metrics (all members).
- */
-export function usePlaneTeam() {
-  return useQuery<PlaneTeamResponse>({
-    queryKey: ["plane", "team-metrics"],
-    queryFn: () => api.get<PlaneTeamResponse>("/api/plane/team-metrics"),
+// ---------------------------------------------------------------------------
+// Person metrics (Plane)
+// ---------------------------------------------------------------------------
+
+export interface PersonTask {
+  id: number;
+  title: string;
+  project: string;
+  state: string;
+  points: number | null;
+  cycle: string | null;
+  is_bug: boolean;
+}
+
+export interface PersonMetrics {
+  user_id: string;
+  display_name: string;
+  email: string | null;
+  github_username: string | null;
+  avatar_url: string | null;
+  completed_tasks: number;
+  completed_points: number;
+  active_tasks: number;
+  overdue_tasks: number;
+  bug_tasks: number;
+  assigned_tasks: PersonTask[];
+}
+
+// ---------------------------------------------------------------------------
+// GitHub activity
+// ---------------------------------------------------------------------------
+
+export interface WeeklyActivity {
+  week: string;
+  commits: number;
+}
+
+export interface PersonPR {
+  id: number;
+  title: string;
+  repo: string;
+  state: string;
+  merged_at: string | null;
+  created_at: string;
+  url: string | null;
+}
+
+export interface PersonGitHubActivity {
+  user_id: string;
+  github_username: string | null;
+  commits: number;
+  pull_requests: number;
+  prs_merged: number;
+  lines_added: number;
+  lines_deleted: number;
+  weekly_commits: WeeklyActivity[];
+  recent_prs: PersonPR[];
+}
+
+// ---------------------------------------------------------------------------
+// Hooks
+// ---------------------------------------------------------------------------
+
+export function usePersonMetrics(userId: string) {
+  const { toQueryParams } = useFilters();
+  const params = toQueryParams();
+  return useQuery({
+    queryKey: ['person-metrics', userId, params],
+    queryFn: () =>
+      apiGet<PersonMetrics>(
+        `/metrics/comparative`,
+        buildApiParams({ user_id: userId }, params),
+      ),
+    enabled: Boolean(userId),
   });
 }
 
-/**
- * Fetch GitHub team metrics for the current date range.
- */
-export function useGitHubTeam() {
-  const { dateRange } = useDateRange();
-  const from = dateRange.from.toISOString().slice(0, 10);
-  const to = dateRange.to.toISOString().slice(0, 10);
-
-  return useQuery<GitHubTeamResponse>({
-    queryKey: ["github", "team-metrics", from, to],
+export function usePersonGitHubActivity(userId: string) {
+  const { toQueryParams } = useFilters();
+  const params = toQueryParams();
+  return useQuery({
+    queryKey: ['person-github-activity', userId, params],
     queryFn: () =>
-      api.get<GitHubTeamResponse>(
-        `/api/github/team-metrics?from=${from}&to=${to}`,
+      apiGet<PersonGitHubActivity>(
+        `/metrics/github/activity`,
+        buildApiParams({ user_id: userId }, params),
       ),
-  });
-}
-
-/**
- * Fetch detailed GitHub metrics for a specific member, including history.
- */
-export function useGitHubMemberDetail(username: string | null) {
-  const { dateRange } = useDateRange();
-  const from = dateRange.from.toISOString().slice(0, 10);
-  const to = dateRange.to.toISOString().slice(0, 10);
-
-  return useQuery<GitHubMemberDetail>({
-    queryKey: ["github", "member", username, from, to],
-    queryFn: () =>
-      api.get<GitHubMemberDetail>(
-        `/api/github/member/${username}/detail?from=${from}&to=${to}`,
-      ),
-    enabled: !!username,
+    enabled: Boolean(userId),
   });
 }
