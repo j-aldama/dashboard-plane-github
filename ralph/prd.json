@@ -1,21 +1,19 @@
 {
-  "project": "Sync Progress Window",
-  "identifier": "SYNC",
-  "branchName": "feature/sync-progress-window",
-  "description": "Agregar una ventana modal de progreso cuando el usuario hace click en Sincronizar, que muestre en tiempo real cada paso del proceso de sincronizaci\u00f3n (limpiar cach\u00e9, obtener datos de Plane, obtener datos de GitHub) con indicadores visuales de estado (pendiente, en progreso, completado, error) para que el usuario sepa exactamente en qu\u00e9 parte del proceso se encuentra.",
+  "project": "Dashboard de Productividad",
+  "identifier": "DASH",
+  "branchName": "feature/productivity-dashboard",
+  "description": "Dashboard centralizado para visualizar productividad del equipo integrando datos de Plane y GitHub. Permite sincronización manual/automática, comparativas entre miembros, tracking de soporte, y visualización con tablas y gráficas filtradas por proyecto, usuario, ciclo y rango de fechas.",
   "userStories": [
     {
-      "id": "SYNC-001",
-      "title": "Backend: endpoint SSE de sincronizaci\u00f3n con progreso por pasos",
-      "description": "Crear un nuevo endpoint POST /api/sync/stream que use Server-Sent Events (SSE) para reportar el progreso de la sincronizaci\u00f3n paso a paso. En lugar del endpoint actual que solo limpia el cach\u00e9 Redis de golpe y retorna un JSON final, este endpoint debe ejecutar cada fase secuencialmente y emitir eventos SSE con el formato {step, status, message, progress}. Los pasos son: 1) clear_cache (limpiar claves plane:* y github:* de Redis), 2) fetch_plane_metrics (llamar a plane_service.get_team_metrics con force_refresh=True o tras limpiar solo sus claves), 3) fetch_plane_projects (llamar a plane_service.get_projects), 4) fetch_plane_cycles (llamar a plane_service.get_cycles), 5) fetch_github_metrics (llamar a github_service.get_team_metrics). Cada paso emite un evento 'progress' al iniciar (status: in_progress) y al completar (status: completed) o fallar (status: error con mensaje). Al final emite un evento 'complete' con resumen. El endpoint actual POST /api/sync debe mantenerse intacto como fallback. Archivo principal: backend/app/routers/sync.py. Usar StreamingResponse de FastAPI con media_type text/event-stream.",
+      "id": "DASH-001",
+      "title": "Diseño de esquema de base de datos PostgreSQL",
+      "description": "Diseñar e implementar todas las tablas necesarias en PostgreSQL usando SQLAlchemy y Alembic migrations. Tablas requeridas: team_members (id, name, email, plane_user_id, github_username, avatar_url, created_at, updated_at), projects (id, plane_project_id, name, identifier, description, is_support, support_start_date, support_end_date, project_start_date, project_end_date, created_at, updated_at), cycles (id, project_id FK, plane_cycle_id, name, start_date, end_date, is_active, created_at, updated_at), work_items (id, project_id FK, cycle_id FK nullable, assignee_id FK nullable, plane_issue_id, title, state, priority, estimate_points, label_names JSON, is_bug boolean, is_client_blocked boolean, completed_at nullable, created_at, updated_at), github_commits (id, team_member_id FK, repo_name, sha, message, lines_added, lines_removed, committed_at, created_at), github_pull_requests (id, team_member_id FK, repo_name, pr_number, title, state, merged_at nullable, created_at, updated_at), sync_logs (id, sync_type enum manual/auto, status enum running/completed/failed, started_at, completed_at, error_message nullable). Crear migration inicial con Alembic. Incluir indexes en campos frecuentemente consultados (project_id, assignee_id, state, cycle_id, repo_name, team_member_id).",
       "acceptanceCriteria": [
-        "El endpoint POST /api/sync/stream retorna Content-Type: text/event-stream",
-        "Cada paso emite al menos 2 eventos SSE: uno al iniciar (status: in_progress) y uno al completar (status: completed/error)",
-        "El formato de cada evento es: data: {\"step\":\"clear_cache\",\"status\":\"in_progress\",\"message\":\"Limpiando cach\u00e9...\",\"progress\":10}\\n\\n",
-        "Los 5 pasos se ejecutan secuencialmente: clear_cache -> fetch_plane_metrics -> fetch_plane_projects -> fetch_plane_cycles -> fetch_github_metrics",
-        "Si un paso falla, se emite status: error para ese paso y se contin\u00faa con el siguiente",
-        "Al finalizar todos los pasos se emite un evento con type: complete y resumen de pasos exitosos/fallidos",
-        "El endpoint existente POST /api/sync sigue funcionando sin cambios"
+        "Todas las tablas creadas con migration de Alembic ejecutable",
+        "Indexes definidos en FKs y campos de filtro frecuente",
+        "Modelos SQLAlchemy con relaciones correctas (one-to-many, many-to-one)",
+        "Migration reversible (upgrade/downgrade funcional)",
+        "Campos de timestamps automáticos (created_at, updated_at)"
       ],
       "storyPoints": 5,
       "priority": 1,
@@ -24,131 +22,572 @@
       "dependencies": []
     },
     {
-      "id": "SYNC-002",
-      "title": "Frontend: componente SyncProgressModal con dise\u00f1o de pasos",
-      "description": "Crear un componente React SyncProgressModal que renderice una ventana modal overlay con la lista de pasos de sincronizaci\u00f3n y su estado visual. El modal debe aparecer centrado con un backdrop semitransparente oscuro. Dentro, mostrar un t\u00edtulo 'Sincronizando datos...' y una lista vertical de 5 pasos, cada uno con: un \u00edcono de estado (spinner para in_progress, check verde para completed, X roja para error, c\u00edrculo gris para pending), el nombre descriptivo del paso, y opcionalmente un mensaje de detalle. Incluir una barra de progreso general en la parte superior que avance seg\u00fan el porcentaje reportado por el SSE. Al completarse todos los pasos, cambiar el t\u00edtulo a 'Sincronizaci\u00f3n completada' (o 'Sincronizaci\u00f3n con errores' si hubo fallos), y mostrar un bot\u00f3n 'Cerrar' que desmonte el modal. El componente debe usar Tailwind CSS consistente con el dise\u00f1o existente del dashboard (colores slate, bordes redondeados, sombras). Archivo: frontend/components/SyncProgressModal.tsx. Props: isOpen, onClose, steps (array de {id, label, status, message}).",
+      "id": "DASH-002",
+      "title": "Setup base FastAPI con PostgreSQL y configuración",
+      "description": "Configurar el proyecto FastAPI con conexión a PostgreSQL usando asyncpg y SQLAlchemy async. Incluir: estructura de carpetas (app/routers, app/services, app/models, app/schemas), configuración via variables de entorno (DATABASE_URL, PLANE_API_KEY, PLANE_BASE_URL, PLANE_WORKSPACE_SLUG, GITHUB_TOKEN, GITHUB_ORG), health check endpoint GET /api/health que verifique conexión a DB, middleware CORS configurado, manejo global de errores con respuestas genéricas (nunca exponer stack traces). Usar Pydantic Settings para configuración tipada.",
       "acceptanceCriteria": [
-        "El modal se renderiza con backdrop oscuro semitransparente que cubre toda la pantalla",
-        "Muestra una lista de 5 pasos con iconos de estado: pending (c\u00edrculo gris), in_progress (spinner animado), completed (check verde), error (X roja)",
-        "Una barra de progreso en la parte superior refleja el porcentaje de avance",
-        "Al completar todos los pasos, el t\u00edtulo cambia y aparece bot\u00f3n 'Cerrar'",
-        "El modal no se puede cerrar haciendo click fuera mientras la sincronizaci\u00f3n est\u00e1 en progreso",
-        "El dise\u00f1o usa Tailwind CSS consistente con el resto del dashboard (slate, rounded, shadows)",
-        "El componente es responsive y se ve bien en pantallas desde 768px de ancho"
+        "FastAPI arranca sin errores con uvicorn",
+        "GET /api/health retorna status 200 con conexión DB verificada",
+        "Variables de entorno cargadas via Pydantic Settings",
+        "CORS configurado para frontend (localhost:3000 en dev)",
+        "Manejo global de excepciones sin exponer internals",
+        "Estructura de carpetas organizada por dominio"
+      ],
+      "storyPoints": 3,
+      "priority": 1,
+      "domain": "backend",
+      "passes": true,
+      "dependencies": []
+    },
+    {
+      "id": "DASH-003",
+      "title": "Servicio de sincronización de miembros del equipo desde Plane",
+      "description": "Implementar servicio que sincroniza los miembros del workspace de Plane a la tabla team_members. Usar la API de Plane GET /api/v1/workspaces/{slug}/members/. Mapear campos: display_name -> name, email, member id -> plane_user_id, avatar -> avatar_url. Implementar upsert: si el miembro ya existe (por plane_user_id) actualizar datos, si no existe crear registro. Endpoint: POST /api/sync/members. El servicio debe ser reutilizable desde el sync general.",
+      "acceptanceCriteria": [
+        "Endpoint POST /api/sync/members funcional",
+        "Upsert correcto: crea nuevos, actualiza existentes",
+        "Manejo de errores de API de Plane (timeout, 401, 429)",
+        "Logging de cantidad de miembros sincronizados",
+        "No duplica registros en ejecuciones repetidas"
+      ],
+      "storyPoints": 3,
+      "priority": 2,
+      "domain": "backend",
+      "passes": true,
+      "dependencies": [
+        "DASH-001",
+        "DASH-002"
+      ]
+    },
+    {
+      "id": "DASH-004",
+      "title": "Servicio de sincronización de proyectos y ciclos desde Plane",
+      "description": "Implementar servicios que sincronizan proyectos y ciclos activos desde Plane. Para proyectos: GET /api/v1/workspaces/{slug}/projects/ -> tabla projects. Mapear: id -> plane_project_id, name, identifier, description. Para ciclos de cada proyecto: GET /api/v1/workspaces/{slug}/projects/{id}/cycles/ -> tabla cycles. Mapear: id -> plane_cycle_id, name, start_date, end_date. Determinar is_active basado en fecha actual entre start_date y end_date. Soportar múltiples ciclos activos simultáneamente. Endpoint: POST /api/sync/projects-cycles.",
+      "acceptanceCriteria": [
+        "Proyectos sincronizados con upsert por plane_project_id",
+        "Ciclos sincronizados por proyecto con upsert por plane_cycle_id",
+        "Campo is_active calculado correctamente basado en fechas",
+        "Soporta múltiples proyectos y múltiples ciclos activos",
+        "Manejo de paginación en API de Plane si aplica",
+        "Logging detallado de proyectos y ciclos sincronizados"
       ],
       "storyPoints": 5,
-      "priority": 1,
+      "priority": 2,
+      "domain": "backend",
+      "passes": true,
+      "dependencies": [
+        "DASH-001",
+        "DASH-002"
+      ]
+    },
+    {
+      "id": "DASH-005",
+      "title": "Servicio de sincronización de work items (tareas) desde Plane",
+      "description": "Implementar servicio que sincroniza todos los work items de cada proyecto desde Plane. Para cada proyecto: GET /api/v1/workspaces/{slug}/projects/{id}/issues/ con paginación. Mapear campos: id -> plane_issue_id, name -> title, state_detail.name -> state, priority, estimate_point -> estimate_points, label_detail[].name -> label_names (JSON array), assignees[] -> assignee_id (buscar en team_members por plane_user_id). Determinar is_bug: true si algún label contiene 'bug' (case insensitive). Determinar is_client_blocked: true si algún label contiene 'cliente' o 'client' o estado indica bloqueo por cliente. Calcular completed_at basado en estado terminal (Done, Cancelled). Manejar paginación completa (next_cursor o next_page_url). Endpoint: POST /api/sync/work-items.",
+      "acceptanceCriteria": [
+        "Todos los work items de todos los proyectos sincronizados",
+        "Paginación completa manejada (no se pierden items)",
+        "Labels almacenados como JSON array",
+        "is_bug detectado correctamente por label",
+        "Asignación a team_member resuelta por plane_user_id",
+        "estimate_points (Fibonacci) almacenados correctamente",
+        "completed_at calculado para tareas terminadas",
+        "Upsert por plane_issue_id sin duplicados"
+      ],
+      "storyPoints": 8,
+      "priority": 2,
+      "domain": "backend",
+      "passes": true,
+      "dependencies": [
+        "DASH-001",
+        "DASH-003",
+        "DASH-004"
+      ]
+    },
+    {
+      "id": "DASH-006",
+      "title": "Servicio de sincronización de datos de GitHub",
+      "description": "Implementar servicio que sincroniza commits y pull requests desde GitHub para cada miembro del equipo. Usar PyGithub o httpx contra la API REST de GitHub. Para cada repositorio de la organización (GITHUB_ORG): obtener commits GET /repos/{org}/{repo}/commits filtrado por author (github_username de team_members) y rango de fechas. Para cada commit: almacenar sha, message, calcular lines_added y lines_removed via GET /repos/{org}/{repo}/commits/{sha} (stats.additions, stats.deletions). Para PRs: GET /repos/{org}/{repo}/pulls?state=all filtrado por user. Almacenar pr_number, title, state, merged_at. Manejar rate limiting de GitHub (5000 req/hora con token). Usar campo since/until para sync incremental. Endpoint: POST /api/sync/github.",
+      "acceptanceCriteria": [
+        "Commits sincronizados por miembro y repositorio",
+        "Lines added/removed calculadas por commit",
+        "Pull requests sincronizadas con estado y fecha merge",
+        "Rate limiting manejado con backoff exponencial",
+        "Sync incremental basado en última fecha sincronizada",
+        "Repositorios de la org iterados automáticamente",
+        "Manejo de repos sin actividad (skip sin error)"
+      ],
+      "storyPoints": 8,
+      "priority": 2,
+      "domain": "backend",
+      "passes": true,
+      "dependencies": [
+        "DASH-001",
+        "DASH-003"
+      ]
+    },
+    {
+      "id": "DASH-007",
+      "title": "Endpoint de sincronización completa con progreso via SSE",
+      "description": "Implementar endpoint de sincronización completa POST /api/sync/all que ejecuta todos los servicios de sync en orden y reporta progreso via Server-Sent Events (SSE). Pasos en orden: 1) Sync miembros, 2) Sync proyectos y ciclos, 3) Sync work items, 4) Sync GitHub. Cada paso debe emitir eventos SSE con formato: {step: string, status: 'running'|'completed'|'error', progress: number 0-100, message: string}. Al inicio emitir evento con total de pasos. Al final emitir evento de completado o error. Crear registro en sync_logs al inicio (status=running) y actualizar al finalizar (status=completed|failed). Implementar timeout por paso (configurable, default 120s). Si un paso falla, continuar con los siguientes y reportar errores parciales.",
+      "acceptanceCriteria": [
+        "Endpoint SSE funcional que emite eventos de progreso en tiempo real",
+        "Todos los pasos ejecutados en orden correcto",
+        "Progreso reportado por paso con porcentaje",
+        "Errores parciales no detienen la sincronización completa",
+        "sync_logs actualizado con resultado final",
+        "Timeout por paso implementado",
+        "Evento final indica éxito total o éxito parcial con errores"
+      ],
+      "storyPoints": 5,
+      "priority": 3,
+      "domain": "backend",
+      "passes": true,
+      "dependencies": [
+        "DASH-003",
+        "DASH-004",
+        "DASH-005",
+        "DASH-006"
+      ]
+    },
+    {
+      "id": "DASH-008",
+      "title": "Endpoints de consulta de métricas de Plane",
+      "description": "Implementar endpoints REST para consultar métricas agregadas de Plane desde la DB local. GET /api/metrics/overview: resumen general (total tareas, completadas, pendientes, puntos totales, puntos completados, total ciclos, ciclos activos). GET /api/metrics/projects: métricas por proyecto (tareas completadas/pendientes, puntos, bugs, tareas atrasadas). GET /api/metrics/projects/{id}: detalle de un proyecto con breakdown por estado y labels. GET /api/metrics/cycles: lista de ciclos con métricas (tareas totales, completadas, pendientes, puntos). GET /api/metrics/cycles/{id}: detalle de ciclo específico. Todos los endpoints aceptan query params opcionales: project_id, user_id, date_from, date_to. Usar schemas Pydantic para response con tipado estricto.",
+      "acceptanceCriteria": [
+        "Todos los endpoints retornan datos correctos de la DB",
+        "Filtros por proyecto, usuario y rango de fechas funcionales",
+        "Cálculos de métricas agregadas correctos (SUM, COUNT, GROUP BY)",
+        "Schemas Pydantic para todas las responses",
+        "Performance aceptable (<500ms) con datos de prueba",
+        "Manejo de casos vacíos (sin datos aún sincronizados)"
+      ],
+      "storyPoints": 5,
+      "priority": 3,
+      "domain": "backend",
+      "passes": true,
+      "dependencies": [
+        "DASH-001"
+      ]
+    },
+    {
+      "id": "DASH-009",
+      "title": "Endpoints de consulta de métricas de GitHub",
+      "description": "Implementar endpoints REST para consultar métricas de GitHub desde la DB local. GET /api/metrics/github/overview: resumen (total commits, total PRs, total lines added, total lines removed). GET /api/metrics/github/by-user: métricas agrupadas por miembro (commits, PRs, lines added/removed). GET /api/metrics/github/by-repo: métricas agrupadas por repositorio. GET /api/metrics/github/activity: actividad diaria/semanal para gráficas de tendencia. Todos aceptan query params: user_id, repo_name, date_from, date_to. Implementar schemas Pydantic tipados para responses.",
+      "acceptanceCriteria": [
+        "Endpoints retornan métricas correctas agrupadas",
+        "Filtros por usuario, repo y fechas funcionales",
+        "Actividad temporal correctamente agrupada (diaria/semanal)",
+        "Lines added/removed agregadas correctamente",
+        "Schemas tipados para todas las responses",
+        "Manejo de rangos de fecha sin datos"
+      ],
+      "storyPoints": 5,
+      "priority": 3,
+      "domain": "backend",
+      "passes": true,
+      "dependencies": [
+        "DASH-001"
+      ]
+    },
+    {
+      "id": "DASH-010",
+      "title": "Endpoint de comparativa entre miembros del equipo",
+      "description": "Implementar endpoint GET /api/metrics/comparative que retorne datos comparativos entre miembros del equipo. Para cada miembro retornar: tasks_completed (total tareas terminadas), points_completed (total puntos Fibonacci completados), avg_complexity (promedio de puntos por tarea), active_workload (tareas en progreso actualmente), overdue_tasks (tareas asignadas pasadas de fecha del ciclo), commits (total commits GitHub), prs_merged (total PRs merged), lines_written (total lines added). Aceptar filtros: project_id, cycle_id, date_from, date_to. Incluir ranking por cada métrica. Response debe permitir ordenar por cualquier campo.",
+      "acceptanceCriteria": [
+        "Datos comparativos correctos para cada miembro",
+        "Todas las métricas calculadas correctamente",
+        "Filtros por proyecto, ciclo y fechas funcionales",
+        "Ranking incluido por cada métrica",
+        "Miembros sin actividad aparecen con valores 0",
+        "avg_complexity calculado correctamente (total puntos / total tareas)",
+        "overdue_tasks identificadas por fecha del ciclo"
+      ],
+      "storyPoints": 5,
+      "priority": 3,
+      "domain": "backend",
+      "passes": true,
+      "dependencies": [
+        "DASH-008",
+        "DASH-009"
+      ]
+    },
+    {
+      "id": "DASH-011",
+      "title": "Gestión de proyectos de soporte",
+      "description": "Implementar lógica de soporte en el backend. Un proyecto entra en soporte cuando se marca manualmente desde el dashboard (campo is_support=true en projects). Al activar soporte se registra support_start_date (fecha actual) y se calcula support_end_date (21 días después). Endpoints: PATCH /api/projects/{id}/support con body {activate: boolean} para activar/desactivar soporte. GET /api/metrics/support: lista de proyectos en soporte con fechas, días restantes de soporte, y métricas de tareas de soporte. Validar que solo proyectos con project_end_date pueden activar soporte (ya terminó desarrollo).",
+      "acceptanceCriteria": [
+        "Endpoint PATCH activa/desactiva soporte correctamente",
+        "support_end_date calculado como start + 21 días",
+        "GET /api/metrics/support retorna proyectos en soporte con días restantes",
+        "Validación: solo proyectos terminados pueden activar soporte",
+        "Desactivar soporte limpia fechas de soporte",
+        "Métricas de soporte incluyen tareas del proyecto filtradas por período"
+      ],
+      "storyPoints": 3,
+      "priority": 4,
+      "domain": "backend",
+      "passes": true,
+      "dependencies": [
+        "DASH-004"
+      ]
+    },
+    {
+      "id": "DASH-012",
+      "title": "Sincronización automática programada",
+      "description": "Implementar sistema de sincronización automática usando APScheduler o similar integrado con FastAPI. Endpoint GET /api/sync/schedule para ver configuración actual. Endpoint PUT /api/sync/schedule con body {enabled: boolean, time: 'HH:MM', timezone: string} para configurar. Almacenar configuración en tabla sync_schedule (id, enabled, scheduled_time, timezone, last_run_at, created_at, updated_at). Cuando enabled=true, ejecutar sync completo automáticamente a la hora configurada. Registrar cada ejecución en sync_logs. Si la app se reinicia, restaurar el schedule desde la DB.",
+      "acceptanceCriteria": [
+        "Schedule configurable via API con hora y timezone",
+        "Sync automático se ejecuta a la hora configurada",
+        "Configuración persistida en DB y restaurada al reinicio",
+        "sync_logs registra cada ejecución automática",
+        "GET /api/sync/schedule retorna estado actual y próxima ejecución",
+        "Validación de formato de hora y timezone válidos"
+      ],
+      "storyPoints": 5,
+      "priority": 5,
+      "domain": "backend",
+      "passes": true,
+      "dependencies": [
+        "DASH-007"
+      ]
+    },
+    {
+      "id": "DASH-013",
+      "title": "Setup proyecto Next.js con layout base y navegación",
+      "description": "Configurar el proyecto Next.js 14+ (App Router) con: Tailwind CSS, TanStack Query (React Query) para data fetching, layout principal con sidebar de navegación. Sidebar con links a: Overview, Proyectos, Ciclos, Comparativa, Personas, GitHub, Soporte, Configuración. Layout responsive: sidebar colapsable en mobile. Implementar providers (QueryClientProvider). Configurar proxy a backend API (next.config.js rewrite /api/* -> backend). Crear componentes base reutilizables: MetricCard (número con label e ícono), DataTable (tabla simple con headers configurables), PageHeader (título + acciones). Usar diseño limpio, colores neutros, tipografía clara.",
+      "acceptanceCriteria": [
+        "Next.js arranca sin errores con layout y navegación",
+        "Sidebar funcional con todos los links",
+        "Layout responsive (mobile: sidebar colapsable)",
+        "TanStack Query configurado con QueryClientProvider",
+        "Proxy a backend configurado en next.config.js",
+        "Componentes MetricCard, DataTable y PageHeader reutilizables",
+        "Tailwind CSS funcional con diseño limpio"
+      ],
+      "storyPoints": 5,
+      "priority": 3,
       "domain": "frontend",
       "passes": true,
       "dependencies": []
     },
     {
-      "id": "SYNC-003",
-      "title": "Frontend: hook useSyncProgress para consumir SSE del backend",
-      "description": "Crear un custom hook useSyncProgress que gestione la conexi\u00f3n SSE con el endpoint POST /api/sync/stream y exponga el estado reactivo de cada paso de sincronizaci\u00f3n. El hook debe: 1) Proveer una funci\u00f3n startSync() que inicie la conexi\u00f3n SSE usando fetch con ReadableStream (no EventSource, ya que necesitamos POST). 2) Mantener un estado steps como array de {id, label, status, message, progress} inicializado con los 5 pasos en status pending. 3) Parsear cada l\u00ednea 'data: {...}' del stream y actualizar el paso correspondiente. 4) Exponer: steps (estado actual de cada paso), issyncing (boolean), overallProgress (n\u00famero 0-100), error (string|null), startSync (funci\u00f3n). 5) Al recibir el evento complete, marcar isSyncing=false e invalidar todas las queries de React Query (queryClient.invalidateQueries()) para refrescar el dashboard. 6) Manejar errores de red: si la conexi\u00f3n se corta, marcar los pasos restantes como error. Archivo: frontend/hooks/useSyncProgress.ts. Usar el api base URL de frontend/lib/api.ts para construir la URL del endpoint.",
+      "id": "DASH-014",
+      "title": "Página Overview del dashboard",
+      "description": "Implementar página principal /overview que muestra resumen general del equipo. Sección superior: 6 MetricCards en grid (Total Tareas, Tareas Completadas, Tareas Pendientes, Puntos Completados, Ciclos Activos, Total Bugs). Sección media: gráfica de barras comparando tareas completadas vs pendientes por proyecto (usar Recharts). Sección inferior: tabla resumen de proyectos con columnas (Proyecto, Tareas, Completadas, Pendientes, Puntos, Bugs, Ciclo Actual). Datos via TanStack Query desde GET /api/metrics/overview y GET /api/metrics/projects. Loading states con skeletons. Error states con mensaje amigable.",
       "acceptanceCriteria": [
-        "El hook expone: steps, isSyncing, overallProgress, error, startSync",
-        "startSync() inicia una conexi\u00f3n fetch con streaming al POST /api/sync/stream",
-        "Cada evento SSE recibido actualiza el paso correspondiente en el estado steps",
-        "overallProgress se calcula del campo progress del \u00faltimo evento recibido",
-        "Al recibir el evento complete, se ejecuta queryClient.invalidateQueries()",
-        "Si la conexi\u00f3n se pierde, los pasos pendientes se marcan como error",
-        "El hook limpia la conexi\u00f3n si el componente se desmonta durante la sincronizaci\u00f3n"
-      ],
-      "storyPoints": 5,
-      "priority": 2,
-      "domain": "frontend",
-      "passes": true,
-      "dependencies": [
-        "SYNC-001"
-      ]
-    },
-    {
-      "id": "SYNC-004",
-      "title": "Frontend: integrar SyncProgressModal con bot\u00f3n Sincronizar existente",
-      "description": "Modificar el componente FreshnessIndicator.tsx para que al hacer click en el bot\u00f3n 'Sincronizar', en lugar de la l\u00f3gica actual (POST /api/sync directo + invalidateQueries), se abra el SyncProgressModal y se use el hook useSyncProgress para gestionar la sincronizaci\u00f3n con progreso visual. Pasos: 1) Importar SyncProgressModal y useSyncProgress. 2) Reemplazar el estado isSyncing local y la funci\u00f3n handleSync por los valores del hook useSyncProgress. 3) Agregar estado isModalOpen para controlar la visibilidad del modal. 4) Al hacer click en Sincronizar: setIsModalOpen(true) y llamar startSync(). 5) Pasar los props correctos al SyncProgressModal: isOpen, onClose (que hace setIsModalOpen(false) solo si !isSyncing), steps del hook. 6) Mantener el \u00edcono de CloudSync rotando en el bot\u00f3n mientras isSyncing sea true (comportamiento existente). 7) Asegurar que el bot\u00f3n Sincronizar quede disabled mientras isSyncing. El bot\u00f3n Actualizar (refresh) NO debe verse afectado por este cambio. Archivo a modificar: frontend/components/FreshnessIndicator.tsx.",
-      "acceptanceCriteria": [
-        "Click en Sincronizar abre el SyncProgressModal con los pasos en estado pending",
-        "La sincronizaci\u00f3n inicia autom\u00e1ticamente al abrir el modal",
-        "El bot\u00f3n Sincronizar muestra \u00edcono rotando y queda disabled durante la sincronizaci\u00f3n",
-        "El modal muestra el progreso en tiempo real de cada paso",
-        "Al completar la sincronizaci\u00f3n, el dashboard se refresca con datos actualizados",
-        "El bot\u00f3n Actualizar (refresh) sigue funcionando independientemente sin abrir modal",
-        "Si el modal se cierra despu\u00e9s de completar, el estado se resetea correctamente para la pr\u00f3xima sincronizaci\u00f3n"
-      ],
-      "storyPoints": 3,
-      "priority": 2,
-      "domain": "frontend",
-      "passes": true,
-      "dependencies": [
-        "SYNC-002",
-        "SYNC-003"
-      ]
-    },
-    {
-      "id": "SYNC-005",
-      "title": "Frontend: labels descriptivos en espa\u00f1ol y UX de los pasos de sincronizaci\u00f3n",
-      "description": "Definir las constantes de los 5 pasos de sincronizaci\u00f3n con labels descriptivos en espa\u00f1ol que el usuario pueda entender f\u00e1cilmente, y agregar detalles de UX como mensajes de error amigables y transiciones suaves. Los pasos con sus labels deben ser: 1) clear_cache \u2192 'Limpiando datos en cach\u00e9' 2) fetch_plane_metrics \u2192 'Obteniendo m\u00e9tricas del equipo desde Plane' 3) fetch_plane_projects \u2192 'Obteniendo proyectos desde Plane' 4) fetch_plane_cycles \u2192 'Obteniendo ciclos de sprint desde Plane' 5) fetch_github_metrics \u2192 'Obteniendo m\u00e9tricas de c\u00f3digo desde GitHub'. Agregar transiciones CSS (transition-all) para que los cambios de estado de cada paso sean suaves. Los mensajes de error deben ser descriptivos: 'No se pudieron obtener las m\u00e9tricas de Plane. Se usar\u00e1n los datos anteriores.' en lugar de mensajes t\u00e9cnicos. Agregar un \u00edcono de check animado (scale-in) cuando un paso se completa exitosamente. Archivos: frontend/components/SyncProgressModal.tsx y frontend/hooks/useSyncProgress.ts (constantes de pasos iniciales).",
-      "acceptanceCriteria": [
-        "Los 5 pasos se muestran con labels en espa\u00f1ol claros y descriptivos",
-        "Los mensajes de error son amigables y en espa\u00f1ol, sin jerga t\u00e9cnica",
-        "Las transiciones entre estados de cada paso son suaves (transition-all duration-300)",
-        "El \u00edcono de check tiene una animaci\u00f3n de entrada (scale-in o similar)",
-        "Los labels son consistentes entre el hook (constantes) y el modal (renderizado)",
-        "Si todos los pasos fallan, se muestra un mensaje general sugiriendo verificar la conexi\u00f3n"
-      ],
-      "storyPoints": 2,
-      "priority": 3,
-      "domain": "frontend",
-      "passes": true,
-      "dependencies": [
-        "SYNC-002",
-        "SYNC-003"
-      ]
-    },
-    {
-      "id": "SYNC-006",
-      "title": "Backend: manejo robusto de errores y timeouts por paso en sync/stream",
-      "description": "Mejorar el endpoint POST /api/sync/stream para manejar robustamente errores y timeouts en cada paso individual de la sincronizaci\u00f3n. Cada paso (fetch_plane_metrics, fetch_plane_projects, fetch_plane_cycles, fetch_github_metrics) debe ejecutarse con un timeout configurable (default 30 segundos por paso) usando asyncio.wait_for. Si un paso falla por timeout o excepci\u00f3n, se debe: 1) Emitir evento SSE con status error y mensaje descriptivo, 2) Registrar el error en el logger con traceback completo, 3) Continuar con el siguiente paso (no abortar toda la sincronizaci\u00f3n). Agregar un paso final de resumen que indique cu\u00e1ntos pasos fueron exitosos y cu\u00e1ntos fallaron. Asegurar que el stream SSE se cierre correctamente incluso si hay una excepci\u00f3n no capturada (usar try/finally en el generador). Archivo: backend/app/routers/sync.py. Considerar que las llamadas a los servicios de Plane y GitHub son async y pueden lanzar httpx.HTTPError, asyncio.TimeoutError, o excepciones gen\u00e9ricas.",
-      "acceptanceCriteria": [
-        "Cada paso tiene un timeout de 30 segundos (configurable)",
-        "Si un paso excede el timeout, se emite error y se contin\u00faa con el siguiente",
-        "Las excepciones de cada paso se capturan individualmente sin abortar el stream",
-        "El logger registra errores con traceback completo para debugging",
-        "El evento final de resumen incluye conteo de pasos exitosos y fallidos",
-        "El stream SSE se cierra correctamente con try/finally incluso ante excepciones no esperadas",
-        "Los errores de red (httpx.HTTPError) se manejan con mensajes descriptivos"
-      ],
-      "storyPoints": 3,
-      "priority": 3,
-      "domain": "backend",
-      "passes": true,
-      "dependencies": [
-        "SYNC-001"
-      ]
-    },
-    {
-      "id": "SYNC-007",
-      "title": "QA: tests para el flujo completo de sincronizaci\u00f3n con progreso",
-      "description": "Escribir tests para validar el flujo completo de sincronizaci\u00f3n con progreso, tanto en backend como frontend. Backend (pytest): 1) Test que POST /api/sync/stream retorna Content-Type text/event-stream, 2) Test que el stream emite eventos para cada paso en orden correcto, 3) Test que un fallo en un servicio emite error para ese paso pero contin\u00faa los dem\u00e1s, 4) Test que el endpoint original POST /api/sync sigue funcionando. Frontend (jest/vitest): 1) Test que useSyncProgress inicializa con 5 pasos en status pending, 2) Test que startSync() parsea eventos SSE y actualiza los pasos, 3) Test que SyncProgressModal renderiza todos los pasos con sus estados correctos, 4) Test que el bot\u00f3n Cerrar solo aparece cuando la sincronizaci\u00f3n termina, 5) Test que click en Sincronizar en FreshnessIndicator abre el modal. Usar mocks para las llamadas de red (httpx para backend, fetch para frontend). Archivos: backend/tests/test_sync_stream.py, frontend/__tests__/SyncProgressModal.test.tsx, frontend/__tests__/useSyncProgress.test.ts.",
-      "acceptanceCriteria": [
-        "Al menos 4 tests de backend que cubran el endpoint SSE de sync/stream",
-        "Al menos 5 tests de frontend que cubran el hook, el modal y la integraci\u00f3n",
-        "Los tests de backend mockean los servicios de Plane y GitHub para no depender de APIs externas",
-        "Los tests de frontend mockean fetch/ReadableStream para simular eventos SSE",
-        "Todos los tests pasan en CI sin requerir servicios externos",
-        "Test espec\u00edfico que valida que un error en un paso no impide los dem\u00e1s",
-        "Test que valida que el endpoint original POST /api/sync no fue afectado"
+        "6 MetricCards con datos reales del backend",
+        "Gráfica de barras por proyecto funcional (Recharts)",
+        "Tabla resumen de proyectos con datos correctos",
+        "Loading skeletons mientras carga",
+        "Error handling con mensaje al usuario",
+        "Datos se refrescan con TanStack Query",
+        "Layout responsive en mobile"
       ],
       "storyPoints": 5,
       "priority": 4,
+      "domain": "frontend",
+      "passes": true,
+      "dependencies": [
+        "DASH-008",
+        "DASH-013"
+      ]
+    },
+    {
+      "id": "DASH-015",
+      "title": "Página de detalle de Proyecto",
+      "description": "Implementar página /projects/{id} que muestra métricas detalladas de un proyecto específico. Header: nombre del proyecto, identificador, estado de soporte (badge). Sección métricas: MetricCards (Tareas Totales, Completadas, Pendientes, Puntos Totales, Puntos Completados, Bugs Abiertos, Atrasos Cliente). Sección ciclo actual: nombre del ciclo, fechas, progreso visual (progress bar), tareas del ciclo en tabla. Sección breakdown por labels: tabla con cada label y count de tareas. Sección bugs: tabla filtrada mostrando solo tareas con is_bug=true. Sección bloqueos cliente: tabla filtrada mostrando tareas bloqueadas por cliente. Datos via GET /api/metrics/projects/{id}.",
+      "acceptanceCriteria": [
+        "Header con nombre, identificador y badge de soporte",
+        "MetricCards con datos del proyecto",
+        "Progreso del ciclo actual visualizado con progress bar",
+        "Tabla de tareas del ciclo con estado y asignado",
+        "Breakdown por labels correcto",
+        "Tabla de bugs filtrada",
+        "Tabla de bloqueos cliente filtrada",
+        "Loading y error states"
+      ],
+      "storyPoints": 5,
+      "priority": 4,
+      "domain": "frontend",
+      "passes": true,
+      "dependencies": [
+        "DASH-008",
+        "DASH-013"
+      ]
+    },
+    {
+      "id": "DASH-016",
+      "title": "Página de listado de Proyectos",
+      "description": "Implementar página /projects que muestra todos los proyectos sincronizados como cards o tabla. Cada proyecto muestra: nombre, identificador, métricas resumen (tareas, puntos, bugs), ciclo activo actual, estado de soporte (badge si aplica). Click en proyecto navega a /projects/{id}. Filtros: búsqueda por nombre, filtro por estado de soporte (todos, en soporte, sin soporte). Ordenar por: nombre, tareas pendientes, bugs. Datos via GET /api/metrics/projects.",
+      "acceptanceCriteria": [
+        "Lista de proyectos con métricas resumen",
+        "Navegación a detalle de proyecto funcional",
+        "Filtro de búsqueda por nombre",
+        "Filtro por estado de soporte",
+        "Ordenamiento por múltiples campos",
+        "Badge visual para proyectos en soporte",
+        "Estado vacío si no hay proyectos sincronizados"
+      ],
+      "storyPoints": 3,
+      "priority": 4,
+      "domain": "frontend",
+      "passes": true,
+      "dependencies": [
+        "DASH-008",
+        "DASH-013"
+      ]
+    },
+    {
+      "id": "DASH-017",
+      "title": "Página de Ciclos (Sprints)",
+      "description": "Implementar página /cycles que muestra todos los ciclos con sus métricas. Vista principal: lista de ciclos agrupados por proyecto. Cada ciclo muestra: nombre, proyecto, fechas (inicio-fin), días restantes, tareas (completadas/total), puntos (completados/total), progress bar visual. Destacar ciclos activos vs completados (color/badge). Click en ciclo expande detalle inline o navega a vista detalle. Detalle de ciclo: tabla de tareas del ciclo con columnas (Tarea, Asignado, Estado, Puntos, Labels). Filtros: por proyecto, solo activos, rango de fechas. Datos via GET /api/metrics/cycles.",
+      "acceptanceCriteria": [
+        "Ciclos listados agrupados por proyecto",
+        "Métricas correctas por ciclo (tareas, puntos)",
+        "Progress bar visual por ciclo",
+        "Ciclos activos destacados visualmente",
+        "Detalle de ciclo con tabla de tareas",
+        "Filtros por proyecto y estado funcionales",
+        "Días restantes calculados correctamente"
+      ],
+      "storyPoints": 5,
+      "priority": 4,
+      "domain": "frontend",
+      "passes": true,
+      "dependencies": [
+        "DASH-008",
+        "DASH-013"
+      ]
+    },
+    {
+      "id": "DASH-018",
+      "title": "Página Comparativa entre miembros del equipo",
+      "description": "Implementar página /comparative con visualización comparativa del desempeño del equipo. Tabla principal con columnas: Miembro, Tareas Completadas, Puntos Completados, Complejidad Promedio, Carga Activa, Tareas Atrasadas, Commits, PRs Merged, Líneas Escritas. Cada columna ordenable (click en header). Ranking visual: medallas o colores para top 3 en cada métrica. Gráfica de barras horizontal comparando una métrica seleccionable entre miembros (dropdown para cambiar métrica). Gráfica radar/spider comparando todas las métricas de 2-3 miembros seleccionados. Filtros: por proyecto, por ciclo, por rango de fechas. Datos via GET /api/metrics/comparative.",
+      "acceptanceCriteria": [
+        "Tabla comparativa con todas las métricas",
+        "Columnas ordenables por click",
+        "Ranking visual (top 3 destacados)",
+        "Gráfica de barras comparativa con selector de métrica",
+        "Gráfica radar para comparación multi-métrica",
+        "Filtros por proyecto, ciclo y fechas funcionales",
+        "Loading y error states correctos"
+      ],
+      "storyPoints": 8,
+      "priority": 4,
+      "domain": "frontend",
+      "passes": true,
+      "dependencies": [
+        "DASH-010",
+        "DASH-013"
+      ]
+    },
+    {
+      "id": "DASH-019",
+      "title": "Página de detalle de Persona",
+      "description": "Implementar página /person/{id} que muestra métricas individuales de un miembro del equipo. Header: avatar, nombre, email. Sección Plane: MetricCards (Tareas Completadas, Puntos Completados, Carga Activa, Tareas Atrasadas, Bugs Asignados). Tabla de tareas asignadas con estado, proyecto, ciclo, puntos. Sección GitHub: MetricCards (Commits, PRs, PRs Merged, Líneas Escritas, Líneas Eliminadas). Gráfica de actividad temporal (commits por semana, últimos 3 meses). Tabla de PRs recientes. Filtros: por proyecto, por rango de fechas. Datos combinando GET /api/metrics/comparative?user_id={id} y endpoints individuales.",
+      "acceptanceCriteria": [
+        "Header con avatar y datos del miembro",
+        "MetricCards de Plane con datos correctos",
+        "Tabla de tareas asignadas filtrable",
+        "MetricCards de GitHub con datos correctos",
+        "Gráfica de actividad temporal funcional (Recharts)",
+        "Tabla de PRs recientes",
+        "Filtros por proyecto y fechas funcionales"
+      ],
+      "storyPoints": 5,
+      "priority": 4,
+      "domain": "frontend",
+      "passes": true,
+      "dependencies": [
+        "DASH-008",
+        "DASH-009",
+        "DASH-013"
+      ]
+    },
+    {
+      "id": "DASH-020",
+      "title": "Página de listado de Personas",
+      "description": "Implementar página /person que muestra todos los miembros del equipo con resumen de métricas. Grid de cards por persona: avatar, nombre, tareas completadas, puntos, commits, PRs. Click en card navega a /person/{id}. Mini-ranking: indicador visual del top performer. Búsqueda por nombre. Datos via GET /api/metrics/comparative.",
+      "acceptanceCriteria": [
+        "Grid de cards con métricas resumen por persona",
+        "Navegación a detalle funcional",
+        "Indicador visual de top performers",
+        "Búsqueda por nombre funcional",
+        "Estado vacío si no hay miembros sincronizados",
+        "Responsive: 1 col mobile, 2 cols tablet, 3-4 cols desktop"
+      ],
+      "storyPoints": 3,
+      "priority": 4,
+      "domain": "frontend",
+      "passes": true,
+      "dependencies": [
+        "DASH-010",
+        "DASH-013"
+      ]
+    },
+    {
+      "id": "DASH-021",
+      "title": "Página de métricas GitHub",
+      "description": "Implementar página /github con métricas dedicadas de GitHub. Sección superior: MetricCards (Total Commits, Total PRs, Total PRs Merged, Total Lines Added, Total Lines Removed). Gráfica de actividad: línea temporal de commits diarios/semanales (últimos 3 meses). Tabla por repositorio: repo name, commits, PRs, lines added, lines removed. Tabla por persona: mismo desglose. Gráfica de barras: commits por persona. Filtros: por persona, por repo, por rango de fechas. Datos via GET /api/metrics/github/*.",
+      "acceptanceCriteria": [
+        "MetricCards de resumen GitHub correctas",
+        "Gráfica temporal de actividad funcional",
+        "Tabla por repositorio con métricas",
+        "Tabla por persona con métricas",
+        "Gráfica de barras por persona",
+        "Filtros funcionales (persona, repo, fechas)",
+        "Loading y error states"
+      ],
+      "storyPoints": 5,
+      "priority": 4,
+      "domain": "frontend",
+      "passes": true,
+      "dependencies": [
+        "DASH-009",
+        "DASH-013"
+      ]
+    },
+    {
+      "id": "DASH-022",
+      "title": "Modal de progreso de sincronización",
+      "description": "Implementar componente SyncProgressModal y botón Sincronizar en el header del dashboard. Botón 'Sincronizar' visible en el header/navbar. Al hacer click: abrir modal, iniciar POST /api/sync/all, consumir SSE events. Modal muestra: lista de pasos (Miembros, Proyectos, Work Items, GitHub) con estado visual (pending/running/completed/error), barra de progreso general, mensaje de estado actual, icono spinner para paso activo. Al completar: mostrar resumen (X miembros, Y proyectos, Z tareas, W commits sincronizados), botón cerrar. Al error parcial: mostrar pasos exitosos y fallidos. Invalidar queries de TanStack Query al completar para refrescar datos. Hook personalizado useSyncProgress para manejar la conexión SSE.",
+      "acceptanceCriteria": [
+        "Botón Sincronizar en header visible",
+        "Modal abre y conecta a SSE correctamente",
+        "Lista de pasos con estados visuales actualizados en tiempo real",
+        "Barra de progreso general funcional",
+        "Spinner en paso activo",
+        "Resumen al completar con contadores",
+        "Errores parciales mostrados claramente",
+        "TanStack Query invalidado al completar (datos frescos)",
+        "Modal se puede cerrar post-sync"
+      ],
+      "storyPoints": 5,
+      "priority": 3,
+      "domain": "frontend",
+      "passes": true,
+      "dependencies": [
+        "DASH-007",
+        "DASH-013"
+      ]
+    },
+    {
+      "id": "DASH-023",
+      "title": "Página de Soporte",
+      "description": "Implementar página /support que muestra proyectos en período de soporte. Lista de proyectos en soporte con: nombre, fecha inicio proyecto, fecha fin proyecto, fecha activación soporte, fecha fin soporte, días restantes (countdown), progress bar de período de soporte. Indicador visual: verde (>10 días), amarillo (5-10 días), rojo (<5 días). Botón para activar soporte en proyectos elegibles (terminados sin soporte activo). Historial de soporte: proyectos cuyo soporte ya venció. Datos via GET /api/metrics/support.",
+      "acceptanceCriteria": [
+        "Lista de proyectos en soporte con todas las fechas",
+        "Countdown de días restantes correcto",
+        "Indicador visual por colores según días restantes",
+        "Progress bar del período de soporte",
+        "Botón activar soporte funcional (PATCH endpoint)",
+        "Historial de soportes vencidos",
+        "Estado vacío si no hay proyectos en soporte"
+      ],
+      "storyPoints": 5,
+      "priority": 5,
+      "domain": "frontend",
+      "passes": true,
+      "dependencies": [
+        "DASH-011",
+        "DASH-013"
+      ]
+    },
+    {
+      "id": "DASH-024",
+      "title": "Sistema de filtros globales con contexto compartido",
+      "description": "Implementar sistema de filtros globales que persiste entre páginas usando React Context o URL search params. Componente DateRangePicker: selector de rango de fechas con presets (Última semana, Último mes, Último trimestre, Custom). Componente ProjectFilter: dropdown multi-select de proyectos. Componente UserFilter: dropdown multi-select de miembros. Componente CycleFilter: dropdown de ciclos (filtrado por proyecto seleccionado). Barra de filtros reutilizable que se muestra en todas las páginas de métricas. Los filtros se pasan como query params a los hooks de TanStack Query. Cambiar un filtro invalida y refetch las queries afectadas. Persistir filtros en URL search params para permitir compartir links.",
+      "acceptanceCriteria": [
+        "DateRangePicker con presets y custom range",
+        "ProjectFilter multi-select funcional",
+        "UserFilter multi-select funcional",
+        "CycleFilter dependiente de proyecto seleccionado",
+        "Filtros persisten en URL search params",
+        "Filtros se aplican a todas las queries de datos",
+        "Cambio de filtro causa refetch automático",
+        "Barra de filtros visible en todas las páginas de métricas",
+        "Filtros restaurados al navegar con URL con params"
+      ],
+      "storyPoints": 5,
+      "priority": 4,
+      "domain": "frontend",
+      "passes": true,
+      "dependencies": [
+        "DASH-013"
+      ]
+    },
+    {
+      "id": "DASH-025",
+      "title": "Página de Configuración de sincronización automática",
+      "description": "Implementar página /settings con configuración de sincronización automática. Sección sync automático: toggle on/off, selector de hora (time picker), selector de timezone, botón guardar. Mostrar estado actual: próxima ejecución programada, última ejecución (fecha, resultado). Historial de sincronizaciones: tabla con últimas 20 ejecuciones (fecha, tipo manual/auto, duración, resultado, errores). Datos via GET /api/sync/schedule y GET /api/sync/logs. Guardar via PUT /api/sync/schedule.",
+      "acceptanceCriteria": [
+        "Toggle de sync automático funcional",
+        "Selector de hora y timezone",
+        "Estado actual mostrado (próxima ejecución, última)",
+        "Historial de sincronizaciones en tabla",
+        "Guardar configuración exitoso con feedback visual",
+        "Validación de hora válida en frontend",
+        "Loading states mientras guarda"
+      ],
+      "storyPoints": 3,
+      "priority": 5,
+      "domain": "frontend",
+      "passes": true,
+      "dependencies": [
+        "DASH-012",
+        "DASH-013"
+      ]
+    },
+    {
+      "id": "DASH-026",
+      "title": "Tests backend: servicios de sincronización",
+      "description": "Implementar tests con pytest para todos los servicios de sincronización. Usar fixtures con datos mock de APIs de Plane y GitHub (httpx mock o respx). Tests para: sync_members (crea nuevos, actualiza existentes, maneja errores API), sync_projects_cycles (múltiples proyectos, ciclos activos/inactivos), sync_work_items (paginación, labels, bugs, asignaciones, bloqueos cliente), sync_github (commits, PRs, rate limiting, repos vacíos), sync_all (orden de pasos, errores parciales, SSE events). Tests de endpoints de métricas: verificar cálculos agregados correctos, filtros, casos vacíos. Usar base de datos de test (SQLite in-memory o PostgreSQL de test). Mínimo 80% coverage en app/services/ y app/routers/.",
+      "acceptanceCriteria": [
+        "Tests para cada servicio de sync con mocks de APIs externas",
+        "Tests de upsert (crear y actualizar)",
+        "Tests de manejo de errores (timeout, 401, 429, 500)",
+        "Tests de paginación en work items y GitHub",
+        "Tests de endpoints de métricas con datos de prueba",
+        "Tests de filtros (project_id, user_id, date_from, date_to)",
+        "Tests de sync completo con SSE",
+        "Coverage >= 80% en services/ y routers/",
+        "Todos los tests pasan en CI"
+      ],
+      "storyPoints": 8,
+      "priority": 5,
       "domain": "qa",
       "passes": true,
       "dependencies": [
-        "SYNC-001",
-        "SYNC-002",
-        "SYNC-003",
-        "SYNC-004"
+        "DASH-007",
+        "DASH-008",
+        "DASH-009",
+        "DASH-010",
+        "DASH-011"
+      ]
+    },
+    {
+      "id": "DASH-027",
+      "title": "Tests frontend: componentes y hooks",
+      "description": "Implementar tests con Vitest y React Testing Library para componentes y hooks del frontend. Tests de componentes: MetricCard (renderiza valor y label), DataTable (renderiza filas, ordenamiento), SyncProgressModal (estados de progreso, completado, error), DateRangePicker (selección de rango, presets), filtros (selección, reset). Tests de hooks: useSyncProgress (conexión SSE, parsing de eventos, estados), hooks de datos (loading, error, success states con MSW para mocks). Tests de páginas: Overview (renderiza métricas), Comparative (tabla ordenable), Projects (lista con filtros). Mínimo 70% coverage en components/ y hooks/.",
+      "acceptanceCriteria": [
+        "Tests de componentes base (MetricCard, DataTable, etc.)",
+        "Tests de SyncProgressModal con todos los estados",
+        "Tests de hooks con mocks de API (MSW)",
+        "Tests de páginas principales (Overview, Comparative, Projects)",
+        "Tests de filtros y interacciones",
+        "Coverage >= 70% en components/ y hooks/",
+        "Todos los tests pasan con vitest run"
+      ],
+      "storyPoints": 8,
+      "priority": 5,
+      "domain": "qa",
+      "passes": true,
+      "dependencies": [
+        "DASH-014",
+        "DASH-018",
+        "DASH-022",
+        "DASH-024"
       ]
     }
   ]
