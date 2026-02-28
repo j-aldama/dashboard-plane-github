@@ -14,6 +14,8 @@ from app.routers import sync_members
 from app.routers import sync_projects
 from app.routers import metrics_plane
 from app.routers import metrics_github
+from app.routers import sync_work_items
+from app.routers import sync_github
 
 logger = logging.getLogger(__name__)
 
@@ -67,3 +69,5 @@ app.include_router(sync_members.router, prefix="/api")
 app.include_router(sync_projects.router, prefix="/api")
 app.include_router(metrics_plane.router)
 app.include_router(metrics_github.router)
+app.include_router(sync_work_items.router, prefix="/api")
+app.include_router(sync_github.router, prefix="/api")
