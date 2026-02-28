@@ -1,291 +1,242 @@
-"use client";
+'use client';
+import { useEffect, useRef } from 'react';
+import { useSyncProgress, SyncStep, StepStatus } from '@/hooks/useSyncProgress';
 
-import { SVGProps } from "react";
-import { CheckCircleIcon, ClockIcon, XIcon } from "@/components/icons";
-
-// ── Types ──────────────────────────────────────────────────────────────────────
-
-export type StepStatus = "pending" | "in_progress" | "completed" | "error";
-
-export interface SyncStep {
-  id: string;
-  label: string;
-  status: StepStatus;
-  message?: string;
-}
-
-export interface SyncProgressModalProps {
+interface SyncProgressModalProps {
   isOpen: boolean;
   onClose: () => void;
-  steps: SyncStep[];
-  overallProgress: number; // 0-100
-  isSyncing: boolean;
 }
-
-// ── Error messages ─────────────────────────────────────────────────────────────
-
-const STEP_ERROR_MESSAGES: Record<string, string> = {
-  clear_cache:
-    "No se pudo limpiar la caché. Se usarán los datos anteriores.",
-  fetch_plane_metrics:
-    "No se pudieron obtener las métricas de Plane. Se usarán los datos anteriores.",
-  fetch_plane_projects:
-    "No se pudieron obtener los proyectos de Plane. Se usarán los datos anteriores.",
-  fetch_plane_cycles:
-    "No se pudieron obtener los ciclos de Plane. Se usarán los datos anteriores.",
-  fetch_github_metrics:
-    "No se pudieron obtener las métricas de GitHub. Se usarán los datos anteriores.",
-};
-
-const ALL_FAILED_MESSAGE =
-  "No se pudo completar la sincronización. Verifica tu conexión a internet e inténtalo nuevamente.";
-
-// ── Internal icons ─────────────────────────────────────────────────────────────
-
-type IconProps = SVGProps<SVGSVGElement> & { size?: number };
-
-function SpinnerIcon({ size = 20, className = "", ...rest }: IconProps) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={`animate-spin ${className}`}
-      {...rest}
-    >
-      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-    </svg>
-  );
-}
-
-function XCircleIcon({ size = 20, className = "", ...rest }: IconProps) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      {...rest}
-    >
-      <circle cx="12" cy="12" r="10" />
-      <line x1="15" y1="9" x2="9" y2="15" />
-      <line x1="9" y1="9" x2="15" y2="15" />
-    </svg>
-  );
-}
-
-// ── Step icon ──────────────────────────────────────────────────────────────────
 
 function StepIcon({ status }: { status: StepStatus }) {
-  switch (status) {
-    case "completed":
-      return (
-        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-green-100 text-green-600 transition-all duration-300">
-          <span className="inline-flex animate-[scale-in_0.3s_ease-out]">
-            <CheckCircleIcon size={14} />
-          </span>
-        </span>
-      );
-    case "in_progress":
-      return (
-        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 transition-all duration-300">
-          <SpinnerIcon size={14} />
-        </span>
-      );
-    case "error":
-      return (
-        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-100 text-red-600 transition-all duration-300">
-          <XCircleIcon size={14} />
-        </span>
-      );
-    case "pending":
-    default:
-      return (
-        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-slate-400 transition-all duration-300">
-          <ClockIcon size={14} />
-        </span>
-      );
+  if (status === 'running') {
+    return (
+      <span className="flex items-center justify-center w-6 h-6 flex-shrink-0">
+        <svg
+          className="w-5 h-5 text-blue-500 animate-spin"
+          fill="none"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path
+            className="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+          />
+        </svg>
+      </span>
+    );
   }
+
+  if (status === 'completed') {
+    return (
+      <span className="flex items-center justify-center w-6 h-6 flex-shrink-0 rounded-full bg-emerald-100">
+        <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+        </svg>
+      </span>
+    );
+  }
+
+  if (status === 'error') {
+    return (
+      <span className="flex items-center justify-center w-6 h-6 flex-shrink-0 rounded-full bg-red-100">
+        <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </span>
+    );
+  }
+
+  // pending
+  return (
+    <span className="flex items-center justify-center w-6 h-6 flex-shrink-0 rounded-full border-2 border-slate-300 bg-white" aria-hidden="true" />
+  );
 }
 
-// ── Step row ───────────────────────────────────────────────────────────────────
-
 function StepRow({ step }: { step: SyncStep }) {
-  const labelColor: Record<StepStatus, string> = {
-    pending: "text-slate-400",
-    in_progress: "text-slate-700 font-medium",
-    completed: "text-slate-700",
-    error: "text-red-600 font-medium",
-  };
-
-  const errorMessage =
-    step.status === "error" && !step.message
-      ? (STEP_ERROR_MESSAGES[step.id] ?? null)
-      : null;
-
-  const displayMessage = step.message ?? errorMessage;
+  const labelColor =
+    step.status === 'completed'
+      ? 'text-slate-700'
+      : step.status === 'error'
+      ? 'text-red-700'
+      : step.status === 'running'
+      ? 'text-blue-700 font-medium'
+      : 'text-slate-400';
 
   return (
-    <li className="flex items-start gap-3 transition-all duration-300">
+    <li className="flex items-start gap-3 py-2">
       <StepIcon status={step.status} />
-      <div className="min-w-0 flex-1">
-        <p className={`text-sm leading-6 ${labelColor[step.status]}`}>
-          {step.label}
-        </p>
-        {displayMessage && (
-          <p
-            className={`mt-0.5 text-xs ${
-              step.status === "error" ? "text-red-500" : "text-slate-400"
-            }`}
-          >
-            {displayMessage}
-          </p>
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm ${labelColor} transition-colors duration-200`}>{step.label}</p>
+        {step.status === 'completed' && step.records_synced !== undefined && (
+          <p className="text-xs text-slate-400 mt-0.5">{step.records_synced} registros sincronizados</p>
+        )}
+        {step.status === 'error' && step.error && (
+          <p className="text-xs text-red-500 mt-0.5 truncate">{step.error}</p>
         )}
       </div>
     </li>
   );
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+export function SyncProgressModal({ isOpen, onClose }: SyncProgressModalProps) {
+  const { startSync, steps, progress, status, results, errors, isRunning } = useSyncProgress();
+  const startedRef = useRef(false);
 
-function deriveTitle(isSyncing: boolean, steps: SyncStep[]): string {
-  if (isSyncing) return "Sincronizando datos...";
-  const hasError = steps.some((s) => s.status === "error");
-  return hasError ? "Sincronización con errores" : "Sincronización completada";
-}
+  useEffect(() => {
+    if (isOpen && !startedRef.current) {
+      startedRef.current = true;
+      startSync();
+    }
+    if (!isOpen) {
+      startedRef.current = false;
+    }
+  }, [isOpen, startSync]);
 
-function clampProgress(value: number): number {
-  return Math.min(100, Math.max(0, value));
-}
-
-function allStepsFailed(steps: SyncStep[]): boolean {
-  return (
-    steps.length > 0 && steps.every((s) => s.status === "error")
-  );
-}
-
-// ── SyncProgressModal ──────────────────────────────────────────────────────────
-
-export function SyncProgressModal({
-  isOpen,
-  onClose,
-  steps,
-  overallProgress,
-  isSyncing,
-}: SyncProgressModalProps) {
   if (!isOpen) return null;
 
-  const progress = clampProgress(overallProgress);
-  const title = deriveTitle(isSyncing, steps);
-  const showAllFailedMessage = !isSyncing && allStepsFailed(steps);
+  const isDone = status === 'completed' || status === 'error';
+  const hasPartialErrors = errors.length > 0 && status === 'completed';
 
-  function handleBackdropClick() {
-    if (!isSyncing) onClose();
-  }
-
-  function handleModalClick(e: React.MouseEvent<HTMLDivElement>) {
-    e.stopPropagation();
-  }
+  const progressBarColor =
+    status === 'error'
+      ? 'bg-red-500'
+      : hasPartialErrors
+      ? 'bg-amber-500'
+      : 'bg-blue-600';
 
   return (
-    <>
-      {/* Keyframes for scale-in animation */}
-      <style>{`
-        @keyframes scale-in {
-          from { transform: scale(0); opacity: 0; }
-          to   { transform: scale(1); opacity: 1; }
-        }
-      `}</style>
-
-      {/* Backdrop */}
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="sync-modal-title"
+    >
+      {/* Overlay */}
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
-        onClick={handleBackdropClick}
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-      >
-        {/* Modal panel */}
-        <div
-          className="w-full max-w-md rounded-xl bg-white shadow-2xl"
-          onClick={handleModalClick}
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-            <h2 className="text-base font-semibold text-slate-800">{title}</h2>
-            {!isSyncing && (
-              <button
-                onClick={onClose}
-                className="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-                aria-label="Cerrar modal"
-              >
-                <XIcon size={16} />
-              </button>
-            )}
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+        onClick={isDone ? onClose : undefined}
+      />
+
+      {/* Modal panel */}
+      <div className="relative z-10 w-full max-w-md mx-4 bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+          <h2 id="sync-modal-title" className="text-base font-semibold text-slate-900">
+            Sincronización en progreso
+          </h2>
+          <button
+            onClick={onClose}
+            disabled={isRunning}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            aria-label="Cerrar modal"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Progress bar */}
+        <div className="px-6 pt-4">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs text-slate-500">Progreso general</span>
+            <span className="text-xs font-medium text-slate-700">{progress}%</span>
           </div>
+          <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ease-out ${progressBarColor}`}
+              style={{ width: `${progress}%` }}
+              role="progressbar"
+              aria-valuenow={progress}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            />
+          </div>
+        </div>
 
-          {/* Body */}
-          <div className="px-6 py-5">
-            {/* Progress bar */}
-            <div className="mb-5">
-              <div className="mb-1.5 flex items-center justify-between">
-                <span className="text-xs font-medium text-slate-500">
-                  Progreso general
-                </span>
-                <span className="text-xs font-semibold text-indigo-600">
-                  {progress}%
-                </span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
-                <div
-                  className="h-2 rounded-full bg-indigo-500 transition-all duration-500 ease-in-out"
-                  style={{ width: `${progress}%` }}
-                  role="progressbar"
-                  aria-valuenow={progress}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                />
-              </div>
-            </div>
-
-            {/* Steps list */}
-            <ul className="space-y-3">
+        {/* Step list */}
+        <div className="px-6 py-3 max-h-72 overflow-y-auto">
+          {steps.length === 0 && status === 'running' && (
+            <p className="text-sm text-slate-400 py-4 text-center">Iniciando sincronización...</p>
+          )}
+          {steps.length > 0 && (
+            <ul className="divide-y divide-slate-50" aria-label="Pasos de sincronización">
               {steps.map((step) => (
                 <StepRow key={step.id} step={step} />
               ))}
             </ul>
-
-            {/* All-failed message */}
-            {showAllFailedMessage && (
-              <p className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-xs text-red-600">
-                {ALL_FAILED_MESSAGE}
-              </p>
-            )}
-          </div>
-
-          {/* Footer — only when sync finished */}
-          {!isSyncing && (
-            <div className="border-t border-slate-100 px-6 py-4">
-              <button
-                onClick={onClose}
-                className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-              >
-                Cerrar
-              </button>
-            </div>
           )}
         </div>
+
+        {/* Summary — shown when done */}
+        {isDone && results && (
+          <div className="px-6 pb-2">
+            <div
+              className={`rounded-xl p-4 ${
+                hasPartialErrors
+                  ? 'bg-amber-50 border border-amber-200'
+                  : status === 'error'
+                  ? 'bg-red-50 border border-red-200'
+                  : 'bg-emerald-50 border border-emerald-200'
+              }`}
+            >
+              <p className={`text-sm font-medium mb-2 ${hasPartialErrors ? 'text-amber-800' : status === 'error' ? 'text-red-800' : 'text-emerald-800'}`}>
+                {status === 'error'
+                  ? 'Sincronización fallida'
+                  : hasPartialErrors
+                  ? 'Sincronización completada con errores'
+                  : 'Sincronización completada'}
+              </p>
+              <div className="flex gap-4 text-xs">
+                <span className="text-emerald-700 font-medium">
+                  {results.completed_steps} completados
+                </span>
+                {results.failed_steps > 0 && (
+                  <span className="text-red-600 font-medium">
+                    {results.failed_steps} fallidos
+                  </span>
+                )}
+                {results.duration_seconds !== undefined && (
+                  <span className="text-slate-500">
+                    {results.duration_seconds.toFixed(1)}s
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Errors list — only partial errors when sync_complete fired */}
+        {isDone && errors.length > 0 && !results && (
+          <div className="px-6 pb-2">
+            <div className="rounded-xl p-4 bg-red-50 border border-red-200">
+              <p className="text-sm font-medium text-red-800 mb-1">Errores encontrados</p>
+              <ul className="space-y-0.5">
+                {errors.map((err, idx) => (
+                  <li key={idx} className="text-xs text-red-600">
+                    {err}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-slate-100 flex justify-end">
+          <button
+            onClick={onClose}
+            disabled={isRunning}
+            className="px-4 py-2 text-sm font-medium rounded-lg transition-colors
+              bg-slate-900 text-white hover:bg-slate-700
+              disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {isRunning ? 'Sincronizando...' : 'Cerrar'}
+          </button>
+        </div>
       </div>
-    </>
+    </div>
   );
 }

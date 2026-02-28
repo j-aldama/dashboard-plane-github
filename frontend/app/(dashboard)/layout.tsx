@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { Suspense, useState } from 'react';
 import { FilterProvider } from '@/contexts/FilterContext';
 import { FilterBar } from '@/components/FilterBar';
+import { SyncProgressModal } from '@/components/SyncProgressModal';
 
 const navLinks = [
   {
@@ -89,6 +90,7 @@ interface DashboardLayoutProps {
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [syncModalOpen, setSyncModalOpen] = useState(false);
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
@@ -163,11 +165,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             </h1>
           </div>
 
-          {/* Placeholder for Sync button */}
+          {/* Sync button */}
           <div className="flex items-center gap-3">
             <button
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-              disabled
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+              onClick={() => setSyncModalOpen(true)}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -187,6 +189,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </FilterProvider>
         </Suspense>
       </div>
+
+      <SyncProgressModal
+        isOpen={syncModalOpen}
+        onClose={() => setSyncModalOpen(false)}
+      />
     </div>
   );
 }
