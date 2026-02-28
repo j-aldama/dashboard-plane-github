@@ -19,6 +19,9 @@ from app.routers import sync_github
 from app.routers import metrics_comparative
 from app.routers import support
 from app.routers import sync_all
+from app.routers import sync_schedule
+from app.database import AsyncSessionLocal
+from app.services.scheduler import start_scheduler, stop_scheduler
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +35,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("Database connection verified successfully.")
     except Exception as exc:
         logger.error("Failed to connect to database on startup: %s", exc)
+    try:
+        async with AsyncSessionLocal() as db:
+            await start_scheduler(db)
+        logger.info("Scheduler started successfully.")
+    except Exception as exc:
+        logger.error("Failed to start scheduler: %s", exc)
     yield
+    stop_scheduler()
     logger.info("Shutting down — disposing database engine...")
     await engine.dispose()
 
@@ -77,3 +87,4 @@ app.include_router(sync_github.router, prefix="/api")
 app.include_router(metrics_comparative.router)
 app.include_router(support.router)
 app.include_router(sync_all.router, prefix="/api")
+app.include_router(sync_schedule.router, prefix="/api")
