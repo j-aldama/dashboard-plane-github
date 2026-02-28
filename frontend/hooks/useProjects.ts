@@ -1,43 +1,27 @@
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
-import { ProjectsResponse } from "@/types/projects";
-import { CyclesResponse, CycleAnalysisResponse } from "@/types/cycles";
+'use client';
+import { useQuery } from '@tanstack/react-query';
+import { apiGet } from '@/lib/api';
+import { useFilters, buildApiParams } from '@/hooks/useFilters';
 
-// ── Hooks ──────────────────────────────────────────────────────────────────────
+export interface ProjectItem {
+  id: number;
+  name: string;
+  identifier: string;
+  total_tasks: number;
+  completed_tasks: number;
+  pending_tasks: number;
+  total_points: number;
+  completed_points: number;
+  total_bugs: number;
+  active_cycle: string | null;
+  is_support: boolean;
+}
 
-/**
- * Fetch all projects from Plane API.
- */
 export function useProjects() {
-  return useQuery<ProjectsResponse>({
-    queryKey: ["plane", "projects"],
-    queryFn: () => api.get<ProjectsResponse>("/api/plane/projects"),
-    staleTime: 4 * 60 * 1000,
-  });
-}
-
-/**
- * Fetch all cycles, used to find current cycle for a given project.
- */
-export function useProjectCycles() {
-  return useQuery<CyclesResponse>({
-    queryKey: ["plane", "cycles"],
-    queryFn: () => api.get<CyclesResponse>("/api/plane/cycles"),
-    staleTime: 4 * 60 * 1000,
-  });
-}
-
-/**
- * Fetch cycle analysis for a specific cycle.
- */
-export function useProjectCycleAnalysis(cycleId: string | null) {
-  return useQuery<CycleAnalysisResponse>({
-    queryKey: ["plane", "cycles", cycleId, "analysis"],
-    queryFn: () =>
-      api.get<CycleAnalysisResponse>(
-        `/api/plane/cycles/${cycleId}/analysis`,
-      ),
-    enabled: !!cycleId,
-    staleTime: 4 * 60 * 1000,
+  const { toQueryParams } = useFilters();
+  const params = toQueryParams();
+  return useQuery({
+    queryKey: ['projects-list', params],
+    queryFn: () => apiGet<{ projects: ProjectItem[] }>('/metrics/projects', buildApiParams({}, params)),
   });
 }
