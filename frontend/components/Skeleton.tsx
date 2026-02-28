@@ -1,85 +1,52 @@
-import { HTMLAttributes } from "react";
-
-type SkeletonVariant = "text" | "card" | "chart" | "table";
-
-interface SkeletonProps extends HTMLAttributes<HTMLDivElement> {
-  variant?: SkeletonVariant;
-  lines?: number;
+interface SkeletonProps {
+  className?: string;
+  count?: number;
 }
 
-const shimmer =
-  "animate-pulse bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 bg-[length:200%_100%]";
+export function Skeleton({ className = '', count = 1 }: SkeletonProps) {
+  return (
+    <>
+      {[...Array(count)].map((_, i) => (
+        <div
+          key={i}
+          className={`animate-pulse bg-slate-200 rounded ${className}`}
+          aria-hidden="true"
+        />
+      ))}
+    </>
+  );
+}
 
-export function Skeleton({
-  variant = "text",
-  lines = 3,
-  className = "",
-  ...rest
-}: SkeletonProps) {
-  if (variant === "text") {
-    return (
-      <div className={`space-y-2 ${className}`} {...rest}>
-        {Array.from({ length: lines }).map((_, i) => (
-          <div
-            key={i}
-            className={`${shimmer} h-4 rounded ${i === lines - 1 ? "w-3/4" : "w-full"}`}
-          />
-        ))}
-      </div>
-    );
-  }
-
-  if (variant === "card") {
-    return (
-      <div
-        className={`rounded-xl border border-slate-200 bg-white p-6 shadow-sm ${className}`}
-        {...rest}
-      >
-        <div className={`${shimmer} mb-4 h-4 w-1/3 rounded`} />
-        <div className={`${shimmer} mb-2 h-8 w-1/2 rounded`} />
-        <div className={`${shimmer} h-3 w-1/4 rounded`} />
-      </div>
-    );
-  }
-
-  if (variant === "chart") {
-    return (
-      <div
-        className={`rounded-xl border border-slate-200 bg-white p-6 shadow-sm ${className}`}
-        {...rest}
-      >
-        <div className={`${shimmer} mb-4 h-4 w-1/4 rounded`} />
-        <div className={`${shimmer} h-48 w-full rounded-lg`} />
-      </div>
-    );
-  }
-
-  if (variant === "table") {
-    return (
-      <div
-        className={`rounded-xl border border-slate-200 bg-white shadow-sm ${className}`}
-        {...rest}
-      >
-        <div className="border-b border-slate-100 p-4">
-          <div className={`${shimmer} h-4 w-1/4 rounded`} />
+export function MetricCardSkeleton() {
+  return (
+    <div className="card p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1 space-y-3">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-8 w-20" />
+          <Skeleton className="h-3 w-32" />
         </div>
-        {Array.from({ length: lines }).map((_, i) => (
-          <div
-            key={i}
-            className="flex items-center gap-4 border-b border-slate-50 p-4 last:border-0"
-          >
-            <div className={`${shimmer} h-8 w-8 rounded-full`} />
-            <div className="flex-1 space-y-1.5">
-              <div className={`${shimmer} h-3.5 w-1/3 rounded`} />
-              <div className={`${shimmer} h-3 w-1/4 rounded`} />
-            </div>
-            <div className={`${shimmer} h-3.5 w-16 rounded`} />
-            <div className={`${shimmer} h-3.5 w-16 rounded`} />
-          </div>
+        <Skeleton className="h-12 w-12 rounded-lg" />
+      </div>
+    </div>
+  );
+}
+
+export function TableSkeleton({ rows = 5, cols = 4 }: { rows?: number; cols?: number }) {
+  return (
+    <div className="card overflow-hidden">
+      <div className="h-12 bg-slate-50 border-b border-slate-200 px-4 flex items-center gap-4">
+        {[...Array(cols)].map((_, i) => (
+          <Skeleton key={i} className="h-3 flex-1" />
         ))}
       </div>
-    );
-  }
-
-  return null;
+      {[...Array(rows)].map((_, i) => (
+        <div key={i} className="h-14 border-b border-slate-100 px-4 flex items-center gap-4">
+          {[...Array(cols)].map((_, j) => (
+            <Skeleton key={j} className="h-4 flex-1" />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
 }

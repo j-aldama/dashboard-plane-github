@@ -1,242 +1,185 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { DateRangeProvider } from "@/contexts/DateRangeContext";
-import { DateRangePicker } from "@/components/DateRangePicker";
-import { FreshnessIndicator } from "@/components/FreshnessIndicator";
-import {
-  LayoutDashboardIcon,
-  FolderKanbanIcon,
-  UsersIcon,
-  BarChart3Icon,
-  MenuIcon,
-  XIcon,
-} from "@/components/icons";
-
-// ── Nav links ──────────────────────────────────────────────────────────────────
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useState } from 'react';
 
 const navLinks = [
   {
-    href: "/overview",
-    label: "Vista General",
-    Icon: LayoutDashboardIcon,
-    description: "KPIs del equipo",
+    href: '/overview',
+    label: 'Overview',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+      </svg>
+    ),
   },
   {
-    href: "/projects",
-    label: "Por Proyecto",
-    Icon: FolderKanbanIcon,
-    description: "Estado de proyectos",
+    href: '/projects',
+    label: 'Proyectos',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+      </svg>
+    ),
   },
   {
-    href: "/person",
-    label: "Por Persona",
-    Icon: UsersIcon,
-    description: "Métricas individuales",
+    href: '/cycles',
+    label: 'Ciclos',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+      </svg>
+    ),
   },
   {
-    href: "/comparative",
-    label: "Comparativa",
-    Icon: BarChart3Icon,
-    description: "Comparar miembros",
+    href: '/comparative',
+    label: 'Comparativa',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+      </svg>
+    ),
+  },
+  {
+    href: '/person',
+    label: 'Personas',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+      </svg>
+    ),
+  },
+  {
+    href: '/github',
+    label: 'GitHub',
+    icon: (
+      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+        <path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z" />
+      </svg>
+    ),
+  },
+  {
+    href: '/support',
+    label: 'Soporte',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z" />
+      </svg>
+    ),
+  },
+  {
+    href: '/settings',
+    label: 'Configuración',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+    ),
   },
 ];
 
-// ── Sidebar ────────────────────────────────────────────────────────────────────
-
-interface SidebarProps {
-  isOpen: boolean;
-  onClose: () => void;
+interface DashboardLayoutProps {
+  children: React.ReactNode;
 }
 
-function Sidebar({ isOpen, onClose }: SidebarProps) {
+export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
-
-  return (
-    <>
-      {/* Mobile overlay */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-20 bg-black/50 backdrop-blur-sm lg:hidden"
-          onClick={onClose}
-          aria-hidden="true"
-        />
-      )}
-
-      {/* Sidebar panel */}
-      <aside
-        className={`fixed inset-y-0 left-0 z-30 flex w-64 flex-col bg-slate-900 shadow-xl transition-transform duration-200 lg:static lg:z-auto lg:translate-x-0 lg:shadow-none ${
-          isOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        {/* Logo / branding */}
-        <div className="flex h-16 flex-shrink-0 items-center justify-between border-b border-slate-700/80 px-5">
-          <div className="flex items-center gap-2.5">
-            {/* Icon mark */}
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 shadow-md shadow-blue-900/40">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="white"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <rect x="3" y="3" width="7" height="7" rx="1" />
-                <rect x="14" y="3" width="7" height="7" rx="1" />
-                <rect x="3" y="14" width="7" height="7" rx="1" />
-                <rect x="14" y="14" width="7" height="7" rx="1" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-sm font-bold leading-tight text-white">
-                Executive
-              </p>
-              <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-slate-400">
-                Dashboard
-              </p>
-            </div>
-          </div>
-
-          <button
-            className="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white lg:hidden"
-            onClick={onClose}
-            aria-label="Cerrar menú"
-          >
-            <XIcon size={18} />
-          </button>
-        </div>
-
-        {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto px-3 py-4">
-          <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-            Vistas
-          </p>
-          <ul className="space-y-0.5">
-            {navLinks.map(({ href, label, description, Icon }) => {
-              const active =
-                pathname === href || pathname.startsWith(href + "/");
-              return (
-                <li key={href}>
-                  <Link
-                    href={href}
-                    onClick={onClose}
-                    className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 transition-all duration-150 ${
-                      active
-                        ? "bg-blue-600 text-white shadow-sm shadow-blue-900/30"
-                        : "text-slate-300 hover:bg-slate-800 hover:text-white"
-                    }`}
-                  >
-                    <Icon
-                      size={18}
-                      className={`flex-shrink-0 ${
-                        active
-                          ? "text-white"
-                          : "text-slate-400 group-hover:text-slate-200"
-                      }`}
-                    />
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium leading-tight">
-                        {label}
-                      </p>
-                      <p
-                        className={`truncate text-[11px] leading-tight ${
-                          active ? "text-blue-200" : "text-slate-500"
-                        }`}
-                      >
-                        {description}
-                      </p>
-                    </div>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
-
-        {/* Footer */}
-        <div className="border-t border-slate-700/80 px-5 py-4">
-          <div className="flex items-center gap-2">
-            <div className="h-2 w-2 rounded-full bg-green-400 shadow-sm shadow-green-400/50" />
-            <p className="text-xs text-slate-500">Plane + GitHub</p>
-          </div>
-        </div>
-      </aside>
-    </>
-  );
-}
-
-// ── Dashboard shell ────────────────────────────────────────────────────────────
-
-function DashboardShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const pathname = usePathname();
-
-  // Page title for header breadcrumb
-  const currentNav = navLinks.find(
-    (n) => pathname === n.href || pathname.startsWith(n.href + "/"),
-  );
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-20 bg-black/50 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
-      {/* Main area */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {/* Header */}
-        <header className="flex h-16 flex-shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 shadow-sm sm:px-6">
-          <div className="flex min-w-0 items-center gap-4">
+      {/* Sidebar */}
+      <aside
+        className={`
+          fixed inset-y-0 left-0 z-30 w-64 bg-slate-800 flex flex-col
+          transform transition-transform duration-200 ease-in-out
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+          lg:static lg:translate-x-0 lg:flex
+        `}
+      >
+        {/* Logo / Brand */}
+        <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-700">
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+          </div>
+          <span className="text-white font-semibold text-sm">Dashboard</span>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          {navLinks.map((link) => {
+            const isActive = pathname === link.href || pathname.startsWith(link.href + '/');
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={() => setSidebarOpen(false)}
+                className={`sidebar-link ${isActive ? 'sidebar-link-active' : ''}`}
+              >
+                {link.icon}
+                <span>{link.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Footer */}
+        <div className="px-4 py-4 border-t border-slate-700">
+          <p className="text-xs text-slate-500 text-center">v0.1.0 — DASH-013</p>
+        </div>
+      </aside>
+
+      {/* Main content */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Top header bar */}
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 lg:px-6 flex-shrink-0">
+          <div className="flex items-center gap-4">
             {/* Mobile hamburger */}
             <button
-              className="flex-shrink-0 rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 lg:hidden"
+              className="lg:hidden p-2 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
               onClick={() => setSidebarOpen(true)}
               aria-label="Abrir menú"
             >
-              <MenuIcon size={20} />
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
             </button>
-
-            {/* Page title (visible lg+) */}
-            {currentNav && (
-              <div className="hidden items-center gap-2 lg:flex">
-                <span className="text-sm font-medium text-slate-400">
-                  {currentNav.description}
-                </span>
-              </div>
-            )}
-
-            {/* Date range picker */}
-            <DateRangePicker />
+            <h1 className="text-base font-semibold text-slate-900">
+              Dashboard de Productividad
+            </h1>
           </div>
 
-          {/* Right side */}
-          <FreshnessIndicator />
+          {/* Placeholder for Sync button */}
+          <div className="flex items-center gap-3">
+            <button
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              disabled
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Sincronizar
+            </button>
+          </div>
         </header>
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-screen-2xl p-4 sm:p-6">
-            {children}
-          </div>
+          {children}
         </main>
       </div>
     </div>
-  );
-}
-
-// ── Layout export ──────────────────────────────────────────────────────────────
-
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <DateRangeProvider>
-      <DashboardShell>{children}</DashboardShell>
-    </DateRangeProvider>
   );
 }

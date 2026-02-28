@@ -1,14 +1,16 @@
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient } from '@tanstack/react-query';
 
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      // 4 minutes stale time — data refetches after 4 min of being stale
-      staleTime: 4 * 60 * 1000,
-      // Retry failed requests up to 2 times with exponential back-off
+      staleTime: 1000 * 60 * 5,       // 5 minutes
+      gcTime: 1000 * 60 * 30,          // 30 minutes
       retry: 2,
-      // Manual refresh only — no auto-refetch
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30_000),
       refetchOnWindowFocus: false,
+    },
+    mutations: {
+      retry: 0,
     },
   },
 });

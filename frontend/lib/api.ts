@@ -1,54 +1,75 @@
-/**
- * API client wrapper for the FastAPI backend.
- *
- * The NEXT_PUBLIC_API_URL env var points to the backend:
- * - In Docker: http://api:8000  (internal Docker network)
- * - Locally:   http://localhost:8000
- */
+const BASE_URL = '/api';
 
-const BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
   ) {
     super(message);
-    this.name = "ApiError";
+    this.name = 'ApiError';
   }
 }
 
-async function request<T>(
-  path: string,
-  options?: RequestInit,
-): Promise<T> {
-  const url = `${BASE_URL}${path}`;
-  const response = await fetch(url, {
-    headers: {
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
-    ...options,
+async function handleResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    // Never expose internal error details to UI
+    const status = response.status;
+    if (status === 404) throw new ApiError(404, 'Recurso no encontrado');
+    if (status === 401) throw new ApiError(401, 'No autorizado');
+    if (status === 403) throw new ApiError(403, 'Acceso denegado');
+    if (status >= 500) throw new ApiError(status, 'Error del servidor, intenta de nuevo');
+    throw new ApiError(status, 'Error en la solicitud');
+  }
+
+  const contentType = response.headers.get('content-type');
+  if (contentType?.includes('application/json')) {
+    return response.json() as Promise<T>;
+  }
+  return response.text() as unknown as Promise<T>;
+}
+
+export async function apiGet<T>(path: string, params?: Record<string, string>): Promise<T> {
+  const url = new URL(`${BASE_URL}${path}`, window.location.origin);
+  if (params) {
+    Object.entries(params).forEach(([key, value]) => {
+      url.searchParams.set(key, value);
+    });
+  }
+
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
   });
 
-  if (!response.ok) {
-    throw new ApiError(
-      response.status,
-      `API request failed: ${response.status} ${response.statusText}`,
-    );
-  }
-
-  return response.json() as Promise<T>;
+  return handleResponse<T>(response);
 }
 
-export const api = {
-  get: <T>(path: string) => request<T>(path, { method: "GET" }),
-  post: <T>(path: string, body: unknown) =>
-    request<T>(path, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-};
+export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
 
-export { ApiError };
+  return handleResponse<T>(response);
+}
+
+export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+
+  return handleResponse<T>(response);
+}
+
+export async function apiPut<T>(path: string, body?: unknown): Promise<T> {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+
+  return handleResponse<T>(response);
+}
