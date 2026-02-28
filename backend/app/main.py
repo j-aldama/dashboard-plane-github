@@ -1,62 +1,61 @@
 import logging
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
-from app.redis_client import close_redis
 from app.config import settings
-from app.routers import health, plane, github, sync
+from app.database import engine
+from app.routers import health
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    logger.info("Starting up — verifying database connection...")
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        logger.info("Database connection verified successfully.")
+    except Exception as exc:
+        logger.error("Failed to connect to database on startup: %s", exc)
+    yield
+    logger.info("Shutting down — disposing database engine...")
+    await engine.dispose()
+
+
 app = FastAPI(
-    title="Executive Dashboard API",
-    description="Business dashboard API integrating Plane and GitHub metrics.",
+    title="Dashboard de Productividad API",
     version="0.1.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
-# ---------------------------------------------------------------------------
-# CORS
-# ---------------------------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allowed_origins_list,
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ---------------------------------------------------------------------------
-# Routers
-# ---------------------------------------------------------------------------
-app.include_router(health.router, tags=["health"])
-# app.include_router(plane_router, prefix="/api/plane", tags=["plane"])  # EXEC-002
-# app.include_router(github_router, prefix="/api/github", tags=["github"])  # EXEC-003
-app.include_router(plane.router)
-app.include_router(github.router)
-app.include_router(sync.router)
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.error(
+        "Unhandled exception for %s %s: %s",
+        request.method,
+        request.url,
+        exc,
+        exc_info=True,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An unexpected error occurred. Please try again later."},
+    )
 
 
-# ---------------------------------------------------------------------------
-# Lifecycle
-# ---------------------------------------------------------------------------
-@app.on_event("startup")
-async def on_startup() -> None:
-    logger.info("Starting Executive Dashboard API v%s", app.version)
-
-
-@app.on_event("shutdown")
-async def on_shutdown() -> None:
-    logger.info("Shutting down — closing Redis connection")
-    await close_redis()
-
-
-# ---------------------------------------------------------------------------
-# Root
-# ---------------------------------------------------------------------------
-@app.get("/", tags=["root"])
-async def root() -> dict:
-    return {"message": "Executive Dashboard API", "docs": "/docs"}
+app.include_router(health.router, prefix="/api")

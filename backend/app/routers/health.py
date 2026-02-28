@@ -1,41 +1,27 @@
-from datetime import datetime, timezone
+import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.redis_client import ping_redis
-from app.database import ping_database
-from app.schemas.health import HealthResponse, ServiceStatus
+from app.database import get_db
+from app.schemas.health import HealthResponse
 
-router = APIRouter()
+logger = logging.getLogger(__name__)
+
+router = APIRouter(tags=["health"])
 
 
-@router.get(
-    "/health",
-    response_model=HealthResponse,
-    summary="Service health check",
-    tags=["health"],
-)
-async def health_check() -> HealthResponse:
-    """
-    Return the health status of the API and all dependent services.
+@router.get("/health", response_model=HealthResponse)
+async def health_check(db: AsyncSession = Depends(get_db)) -> HealthResponse:
+    try:
+        await db.execute(text("SELECT 1"))
+        db_status = "connected"
+    except Exception as exc:
+        logger.error("Health check — database connectivity failed: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail={"status": "unhealthy", "database": "unreachable"},
+        ) from exc
 
-    Checks:
-    - PostgreSQL database connectivity
-    - Redis cache connectivity
-    """
-    db_ok = await ping_database()
-    redis_ok = await ping_redis()
-
-    services = ServiceStatus(
-        database="connected" if db_ok else "disconnected",
-        redis="connected" if redis_ok else "disconnected",
-    )
-
-    all_ok = db_ok and redis_ok
-    overall = "healthy" if all_ok else "degraded"
-
-    return HealthResponse(
-        status=overall,
-        services=services,
-        timestamp=datetime.now(tz=timezone.utc),
-    )
+    return HealthResponse(status="healthy", database=db_status)

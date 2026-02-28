@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+from pydantic import field_validator
+from typing import List
 
 
 class Settings(BaseSettings):
@@ -7,41 +8,29 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
-        extra="ignore",
     )
 
-    # Plane
-    plane_api_token: str = Field(default="", alias="PLANE_API_TOKEN")
-    plane_workspace_slug: str = Field(default="", alias="PLANE_WORKSPACE_SLUG")
-    plane_base_url: str = Field(default="https://api.plane.so", alias="PLANE_BASE_URL")
+    DATABASE_URL: str
 
-    # GitHub
-    github_token: str = Field(default="", alias="GITHUB_TOKEN")
-    github_org: str = Field(default="", alias="GITHUB_ORG")
-    github_repos: str = Field(default="", alias="GITHUB_REPOS")
+    PLANE_API_KEY: str = ""
+    PLANE_BASE_URL: str = ""
+    PLANE_WORKSPACE_SLUG: str = ""
 
-    # Database
-    database_url: str = Field(
-        default="postgresql+asyncpg://user:password@db:5432/dashboard_ralph",
-        alias="DATABASE_URL",
-    )
+    GITHUB_TOKEN: str = ""
+    GITHUB_ORG: str = ""
 
-    # Redis
-    redis_url: str = Field(default="redis://redis:6379", alias="REDIS_URL")
+    CORS_ORIGINS: List[str] = ["http://localhost:3000"]
 
-    # Cache TTL (seconds) — 1 hour default since refresh is manual
-    cache_ttl: int = Field(default=3600, alias="CACHE_TTL")
-
-    # Backend
-    api_port: int = Field(default=8000, alias="API_PORT")
-    secret_key: str = Field(default="change-me-in-production", alias="SECRET_KEY")
-    allowed_origins: str = Field(
-        default="http://localhost:3000,http://localhost:3030", alias="ALLOWED_ORIGINS"
-    )
-
-    @property
-    def allowed_origins_list(self) -> list[str]:
-        return [origin.strip() for origin in self.allowed_origins.split(",")]
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v: object) -> object:
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
 
 
-settings = Settings()
+def get_settings() -> Settings:
+    return Settings()
+
+
+settings = get_settings()
