@@ -1,47 +1,42 @@
 from __future__ import annotations
 
-from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, String, func
+from sqlalchemy import Index, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base
+from app.database import Base
+from app.models.base import TimestampMixin
 
 if TYPE_CHECKING:
-    from app.models.plane_snapshot import PlaneMetricsSnapshot
-    from app.models.github_snapshot import GithubMetricsSnapshot
+    from app.models.github_commit import GitHubCommit
+    from app.models.github_pull_request import GitHubPullRequest
+    from app.models.work_item import WorkItem
 
 
-class TeamMember(Base):
-    """Represents a team member with cross-platform identity mapping."""
-
+class TeamMember(Base, TimestampMixin):
     __tablename__ = "team_members"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    email: Mapped[str | None] = mapped_column(
-        String(255), unique=True, nullable=True, index=True
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    plane_user_id: Mapped[str] = mapped_column(
+        String(255), unique=True, nullable=False, index=True
     )
-    plane_member_id: Mapped[str | None] = mapped_column(
-        String(255), unique=True, nullable=True, index=True
-    )
-    github_username: Mapped[str | None] = mapped_column(
-        String(255), unique=True, nullable=True, index=True
-    )
-    avatar_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    role: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    github_username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+    # Relationships
+    work_items: Mapped[list[WorkItem]] = relationship(
+        "WorkItem", back_populates="assignee"
     )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    github_commits: Mapped[list[GitHubCommit]] = relationship(
+        "GitHubCommit", back_populates="team_member"
+    )
+    github_pull_requests: Mapped[list[GitHubPullRequest]] = relationship(
+        "GitHubPullRequest", back_populates="team_member"
     )
 
-    plane_snapshots: Mapped[list[PlaneMetricsSnapshot]] = relationship(
-        "PlaneMetricsSnapshot", back_populates="team_member", cascade="all, delete-orphan"
-    )
-    github_snapshots: Mapped[list[GithubMetricsSnapshot]] = relationship(
-        "GithubMetricsSnapshot", back_populates="team_member", cascade="all, delete-orphan"
+    __table_args__ = (
+        Index("ix_team_members_plane_user_id", "plane_user_id"),
     )

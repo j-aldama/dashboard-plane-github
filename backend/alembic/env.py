@@ -12,7 +12,7 @@ from alembic import context
 from app.database import Base  # noqa: F401
 
 # Load all models so they are registered on Base.metadata
-import app.models  # noqa: F401
+from app.models import *  # noqa: F401, F403
 
 config = context.config
 
