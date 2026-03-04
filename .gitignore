@@ -1,0 +1,45 @@
+# ----- Python -----
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+.pytest_cache/
+
+# ----- Node / Next.js -----
+node_modules/
+frontend/.next/
+frontend/out/
+frontend/.tsbuildinfo
+frontend/tsconfig.tsbuildinfo
+
+# ----- Environment -----
+.env
+.env.*
+!.env.example
+
+# ----- IDE -----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ----- OS -----
+.DS_Store
+Thumbs.db
+
+# ----- Docker -----
+*.log
+
+# ----- Claude / Ralph (local tooling) -----
+.claude/logs/
+.claude/projects/
+.claude/plans/
+.claude/tasks/
+.claude/teams/
+ralph/progress.txt
