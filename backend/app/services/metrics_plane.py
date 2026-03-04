@@ -168,17 +168,17 @@ async def get_overview_metrics(
 
 async def get_projects_metrics(
     db: AsyncSession,
+    project_ids: list[int] | None = None,
     user_ids: list[int] | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
 ) -> list[dict]:
     """Return per-project metric summaries."""
     try:
-        projects_result = await db.execute(
-            select(Project)
-            .where(Project.is_archived.is_(False))
-            .order_by(Project.name)
-        )
+        stmt = select(Project).where(Project.is_archived.is_(False)).order_by(Project.name)
+        if project_ids:
+            stmt = stmt.where(Project.id.in_(project_ids))
+        projects_result = await db.execute(stmt)
         projects = projects_result.scalars().all()
 
         if not projects:

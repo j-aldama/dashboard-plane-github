@@ -84,13 +84,15 @@ async def overview(
 
 @router.get("/projects", response_model=ProjectsMetricsResponse)
 async def projects_list(
+    project_ids: str | None = Query(default=None, alias="project_ids", description="Filter by project IDs (comma-separated)"),
     user_ids: str | None = Query(default=None, alias="user_ids", description="Filter by team member IDs (comma-separated)"),
     date_from: date | None = Query(default=None, description="Filter from date (YYYY-MM-DD)"),
     date_to: date | None = Query(default=None, description="Filter to date (YYYY-MM-DD)"),
     db: AsyncSession = Depends(get_db),
 ) -> ProjectsMetricsResponse:
     data = await get_projects_metrics(
-        db, user_ids=_parse_ids(user_ids), date_from=date_from, date_to=date_to
+        db, project_ids=_parse_ids(project_ids), user_ids=_parse_ids(user_ids),
+        date_from=date_from, date_to=date_to,
     )
     projects = [ProjectMetrics(**p) for p in data]
     return ProjectsMetricsResponse(projects=projects)
