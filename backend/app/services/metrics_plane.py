@@ -19,13 +19,11 @@ from app.models.work_item import WorkItem
 
 logger = logging.getLogger(__name__)
 
-# States considered "completed"
-_COMPLETED_STATES = ("Done", "Cancelled")
+# State groups considered "completed" (matches Plane's group field)
+_COMPLETED_GROUPS = ("completed",)
 
-
-def _is_completed(column: Any) -> Any:
-    """SQLAlchemy expression that is true when a work-item state is completed."""
-    return column.in_(_COMPLETED_STATES)
+# State groups excluded from active/pending counts
+_INACTIVE_GROUPS = ("completed", "cancelled", "backlog")
 
 
 # ---------------------------------------------------------------------------
@@ -35,17 +33,20 @@ def _is_completed(column: Any) -> Any:
 
 def _apply_work_item_filters(
     stmt: Any,
-    project_id: int | None = None,
-    user_id: int | None = None,
+    project_ids: list[int] | None = None,
+    user_ids: list[int] | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
+    cycle_id: int | None = None,
 ) -> Any:
     """Apply optional filters to a statement already selecting from WorkItem."""
     conditions = []
-    if project_id is not None:
-        conditions.append(WorkItem.project_id == project_id)
-    if user_id is not None:
-        conditions.append(WorkItem.assignee_id == user_id)
+    if project_ids:
+        conditions.append(WorkItem.project_id.in_(project_ids))
+    if user_ids:
+        conditions.append(WorkItem.assignee_id.in_(user_ids))
+    if cycle_id is not None:
+        conditions.append(WorkItem.cycle_id == cycle_id)
     if date_from is not None:
         conditions.append(
             or_(
@@ -72,10 +73,11 @@ def _apply_work_item_filters(
 
 async def get_overview_metrics(
     db: AsyncSession,
-    project_id: int | None = None,
-    user_id: int | None = None,
+    project_ids: list[int] | None = None,
+    user_ids: list[int] | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
+    cycle_id: int | None = None,
 ) -> dict:
     """Return aggregated overview metrics across all (or filtered) work items."""
     try:
@@ -83,13 +85,13 @@ async def get_overview_metrics(
         stmt = select(
             func.count(WorkItem.id).label("total_tasks"),
             func.sum(
-                case((WorkItem.state.in_(_COMPLETED_STATES), 1), else_=0)
+                case((WorkItem.state_group.in_(_COMPLETED_GROUPS), 1), else_=0)
             ).label("completed_tasks"),
             func.coalesce(func.sum(WorkItem.estimate_points), 0).label("total_points"),
             func.coalesce(
                 func.sum(
                     case(
-                        (WorkItem.state.in_(_COMPLETED_STATES), WorkItem.estimate_points),
+                        (WorkItem.state_group.in_(_COMPLETED_GROUPS), WorkItem.estimate_points),
                         else_=0,
                     )
                 ),
@@ -98,13 +100,28 @@ async def get_overview_metrics(
             func.sum(case((WorkItem.is_bug.is_(True), 1), else_=0)).label(
                 "total_bugs"
             ),
+            func.sum(
+                case(
+                    (
+                        and_(
+                            WorkItem.state_group.notin_(_INACTIVE_GROUPS),
+                            WorkItem.state_group.isnot(None),
+                        ),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("active_tasks"),
         )
-        stmt = _apply_work_item_filters(stmt, project_id, user_id, date_from, date_to)
+        stmt = _apply_work_item_filters(
+            stmt, project_ids=project_ids, user_ids=user_ids,
+            date_from=date_from, date_to=date_to, cycle_id=cycle_id,
+        )
         row = (await db.execute(stmt)).one()
 
         total_tasks: int = row.total_tasks or 0
         completed_tasks: int = row.completed_tasks or 0
-        pending_tasks: int = total_tasks - completed_tasks
+        pending_tasks: int = row.active_tasks or 0
         total_points: int = int(row.total_points or 0)
         completed_points: int = int(row.completed_points or 0)
         total_bugs: int = row.total_bugs or 0
@@ -116,8 +133,8 @@ async def get_overview_metrics(
                 "active_cycles"
             ),
         )
-        if project_id is not None:
-            cycle_stmt = cycle_stmt.where(Cycle.project_id == project_id)
+        if project_ids:
+            cycle_stmt = cycle_stmt.where(Cycle.project_id.in_(project_ids))
         cycle_row = (await db.execute(cycle_stmt)).one()
 
         return {
@@ -151,13 +168,17 @@ async def get_overview_metrics(
 
 async def get_projects_metrics(
     db: AsyncSession,
-    user_id: int | None = None,
+    user_ids: list[int] | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
 ) -> list[dict]:
     """Return per-project metric summaries."""
     try:
-        projects_result = await db.execute(select(Project).order_by(Project.name))
+        projects_result = await db.execute(
+            select(Project)
+            .where(Project.is_archived.is_(False))
+            .order_by(Project.name)
+        )
         projects = projects_result.scalars().all()
 
         if not projects:
@@ -166,7 +187,7 @@ async def get_projects_metrics(
         result = []
         for project in projects:
             metrics = await _compute_project_metrics(
-                db, project, user_id=user_id, date_from=date_from, date_to=date_to
+                db, project, user_ids=user_ids, date_from=date_from, date_to=date_to
             )
             result.append(metrics)
 
@@ -179,7 +200,7 @@ async def get_projects_metrics(
 async def _compute_project_metrics(
     db: AsyncSession,
     project: Project,
-    user_id: int | None = None,
+    user_ids: list[int] | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
 ) -> dict:
@@ -187,23 +208,35 @@ async def _compute_project_metrics(
     stmt = select(
         func.count(WorkItem.id).label("total_tasks"),
         func.sum(
-            case((WorkItem.state.in_(_COMPLETED_STATES), 1), else_=0)
+            case((WorkItem.state_group.in_(_COMPLETED_GROUPS), 1), else_=0)
         ).label("completed_tasks"),
         func.coalesce(func.sum(WorkItem.estimate_points), 0).label("total_points"),
         func.coalesce(
             func.sum(
                 case(
-                    (WorkItem.state.in_(_COMPLETED_STATES), WorkItem.estimate_points),
+                    (WorkItem.state_group.in_(_COMPLETED_GROUPS), WorkItem.estimate_points),
                     else_=0,
                 )
             ),
             0,
         ).label("completed_points"),
         func.sum(case((WorkItem.is_bug.is_(True), 1), else_=0)).label("total_bugs"),
+        func.sum(
+            case(
+                (
+                    and_(
+                        WorkItem.state_group.notin_(_INACTIVE_GROUPS),
+                        WorkItem.state_group.isnot(None),
+                    ),
+                    1,
+                ),
+                else_=0,
+            )
+        ).label("active_tasks"),
     ).where(WorkItem.project_id == project.id)
 
     stmt = _apply_work_item_filters(
-        stmt, project_id=None, user_id=user_id, date_from=date_from, date_to=date_to
+        stmt, user_ids=user_ids, date_from=date_from, date_to=date_to
     )
     row = (await db.execute(stmt)).one()
 
@@ -225,12 +258,16 @@ async def _compute_project_metrics(
         "identifier": project.identifier,
         "total_tasks": total_tasks,
         "completed_tasks": completed_tasks,
-        "pending_tasks": total_tasks - completed_tasks,
+        "pending_tasks": row.active_tasks or 0,
         "total_points": int(row.total_points or 0),
         "completed_points": int(row.completed_points or 0),
         "total_bugs": row.total_bugs or 0,
         "active_cycle": active_cycle,
         "is_support": project.is_support,
+        "project_type": project.project_type,
+        "is_archived": project.is_archived,
+        "project_start_date": project.project_start_date,
+        "project_end_date": project.project_end_date,
     }
 
 
@@ -242,7 +279,7 @@ async def _compute_project_metrics(
 async def get_project_detail(
     db: AsyncSession,
     project_id: int,
-    user_id: int | None = None,
+    user_ids: list[int] | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
 ) -> dict | None:
@@ -257,7 +294,7 @@ async def get_project_detail(
 
         # Base metrics
         base = await _compute_project_metrics(
-            db, project, user_id=user_id, date_from=date_from, date_to=date_to
+            db, project, user_ids=user_ids, date_from=date_from, date_to=date_to
         )
 
         # State breakdown
@@ -268,7 +305,7 @@ async def get_project_detail(
             .order_by(func.count(WorkItem.id).desc())
         )
         state_stmt = _apply_work_item_filters(
-            state_stmt, project_id=None, user_id=user_id, date_from=date_from, date_to=date_to
+            state_stmt, user_ids=user_ids, date_from=date_from, date_to=date_to
         )
         state_rows = (await db.execute(state_stmt)).all()
         state_breakdown = [
@@ -281,7 +318,7 @@ async def get_project_detail(
             WorkItem.project_id == project_id, WorkItem.label_names.isnot(None)
         )
         wi_stmt = _apply_work_item_filters(
-            wi_stmt, project_id=None, user_id=user_id, date_from=date_from, date_to=date_to
+            wi_stmt, user_ids=user_ids, date_from=date_from, date_to=date_to
         )
         label_rows = (await db.execute(wi_stmt)).scalars().all()
         label_counts: dict[str, int] = {}
@@ -297,14 +334,20 @@ async def get_project_detail(
 
         # Bugs
         bugs = await _fetch_work_items_summary(
-            db, project_id, user_id=user_id, date_from=date_from, date_to=date_to,
+            db, project_id, user_ids=user_ids, date_from=date_from, date_to=date_to,
             is_bug=True
         )
 
         # Client-blocked
         client_blocked = await _fetch_work_items_summary(
-            db, project_id, user_id=user_id, date_from=date_from, date_to=date_to,
+            db, project_id, user_ids=user_ids, date_from=date_from, date_to=date_to,
             is_client_blocked=True
+        )
+
+        # Pending items (not completed/cancelled)
+        pending_items = await _fetch_work_items_summary(
+            db, project_id, user_ids=user_ids, date_from=date_from, date_to=date_to,
+            exclude_completed=True
         )
 
         return {
@@ -313,6 +356,7 @@ async def get_project_detail(
             "label_breakdown": label_breakdown,
             "bugs": bugs,
             "client_blocked": client_blocked,
+            "pending_items": pending_items,
         }
     except Exception:
         logger.error("get_project_detail failed for project_id=%s", project_id, exc_info=True)
@@ -322,11 +366,12 @@ async def get_project_detail(
 async def _fetch_work_items_summary(
     db: AsyncSession,
     project_id: int,
-    user_id: int | None = None,
+    user_ids: list[int] | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
     is_bug: bool = False,
     is_client_blocked: bool = False,
+    exclude_completed: bool = False,
 ) -> list[dict]:
     """Return a list of work-item summary dicts with optional assignee name."""
     stmt = (
@@ -345,8 +390,13 @@ async def _fetch_work_items_summary(
         stmt = stmt.where(WorkItem.is_bug.is_(True))
     if is_client_blocked:
         stmt = stmt.where(WorkItem.is_client_blocked.is_(True))
+    if exclude_completed:
+        stmt = stmt.where(
+            WorkItem.state_group.notin_(_INACTIVE_GROUPS),
+            WorkItem.state_group.isnot(None),
+        )
     stmt = _apply_work_item_filters(
-        stmt, project_id=None, user_id=user_id, date_from=date_from, date_to=date_to
+        stmt, user_ids=user_ids, date_from=date_from, date_to=date_to
     )
     stmt = stmt.order_by(WorkItem.id)
 
@@ -371,7 +421,7 @@ async def _fetch_work_items_summary(
 
 async def get_cycles_metrics(
     db: AsyncSession,
-    project_id: int | None = None,
+    project_ids: list[int] | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
 ) -> list[dict]:
@@ -382,8 +432,8 @@ async def get_cycles_metrics(
             .join(Project, Cycle.project_id == Project.id)
             .order_by(Cycle.is_active.desc(), Cycle.start_date.desc())
         )
-        if project_id is not None:
-            cycle_stmt = cycle_stmt.where(Cycle.project_id == project_id)
+        if project_ids:
+            cycle_stmt = cycle_stmt.where(Cycle.project_id.in_(project_ids))
         if date_from is not None:
             cycle_stmt = cycle_stmt.where(
                 or_(Cycle.end_date >= date_from, Cycle.start_date >= date_from)
@@ -418,18 +468,30 @@ async def _compute_cycle_metrics(
     stmt = select(
         func.count(WorkItem.id).label("total_tasks"),
         func.sum(
-            case((WorkItem.state.in_(_COMPLETED_STATES), 1), else_=0)
+            case((WorkItem.state_group.in_(_COMPLETED_GROUPS), 1), else_=0)
         ).label("completed_tasks"),
         func.coalesce(func.sum(WorkItem.estimate_points), 0).label("total_points"),
         func.coalesce(
             func.sum(
                 case(
-                    (WorkItem.state.in_(_COMPLETED_STATES), WorkItem.estimate_points),
+                    (WorkItem.state_group.in_(_COMPLETED_GROUPS), WorkItem.estimate_points),
                     else_=0,
                 )
             ),
             0,
         ).label("completed_points"),
+        func.sum(
+            case(
+                (
+                    and_(
+                        WorkItem.state_group.notin_(_INACTIVE_GROUPS),
+                        WorkItem.state_group.isnot(None),
+                    ),
+                    1,
+                ),
+                else_=0,
+            )
+        ).label("active_tasks"),
     ).where(WorkItem.cycle_id == cycle.id)
     row = (await db.execute(stmt)).one()
 
@@ -446,7 +508,7 @@ async def _compute_cycle_metrics(
         "is_active": cycle.is_active,
         "total_tasks": total_tasks,
         "completed_tasks": completed_tasks,
-        "pending_tasks": total_tasks - completed_tasks,
+        "pending_tasks": row.active_tasks or 0,
         "total_points": int(row.total_points or 0),
         "completed_points": int(row.completed_points or 0),
     }

@@ -39,6 +39,10 @@ class ProjectMetrics(BaseModel):
     total_bugs: int
     active_cycle: str | None
     is_support: bool
+    project_type: str
+    is_archived: bool
+    project_start_date: date | None
+    project_end_date: date | None
 
 
 class ProjectsMetricsResponse(BaseModel):
@@ -74,6 +78,7 @@ class ProjectDetail(BaseModel):
     name: str
     identifier: str | None
     is_support: bool
+    project_type: str
     total_tasks: int
     completed_tasks: int
     pending_tasks: int
@@ -81,10 +86,14 @@ class ProjectDetail(BaseModel):
     completed_points: int
     total_bugs: int
     active_cycle: str | None
+    is_archived: bool
+    project_start_date: date | None
+    project_end_date: date | None
     state_breakdown: list[StateBreakdownItem]
     label_breakdown: list[LabelBreakdownItem]
     bugs: list[WorkItemSummary]
     client_blocked: list[WorkItemSummary]
+    pending_items: list[WorkItemSummary]
 
 
 # ---------------------------------------------------------------------------

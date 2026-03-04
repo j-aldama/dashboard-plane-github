@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models.cycle import Cycle
 from app.models.project import Project
+from app.services.plane_client import plane_get
 
 logger = logging.getLogger(__name__)
 
@@ -55,8 +56,7 @@ async def _fetch_all_pages(
     current_url: str | None = url
 
     while current_url:
-        resp = await client.get(current_url, headers=headers)
-        resp.raise_for_status()
+        resp = await plane_get(client, current_url, headers)
         payload = resp.json()
 
         # Non-paginated response — plain list
@@ -111,6 +111,13 @@ async def _upsert_project(
     project.name = plane_data.get("name") or ""
     project.identifier = plane_data.get("identifier")
     project.description = plane_data.get("description")
+    project.is_archived = plane_data.get("archived_at") is not None
+    project.is_support = bool(plane_data.get("intake_view"))
+
+    # Only set project_type on new projects (from intake_view heuristic).
+    # Existing projects keep their manually-set project_type.
+    if created:
+        project.project_type = "support" if project.is_support else "client"
 
     return project, created
 
