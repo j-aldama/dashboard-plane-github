@@ -7,7 +7,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { Skeleton } from '@/components/Skeleton';
 import { useProjects, ProjectItem } from '@/hooks/useProjects';
 
-type SupportFilter = 'all' | 'support' | 'no-support';
+type ProjectTypeFilter = 'all' | 'client' | 'support' | 'internal';
 type SortField = 'name' | 'pending_tasks' | 'total_bugs' | 'total_tasks';
 type SortDirection = 'asc' | 'desc';
 
@@ -60,10 +60,12 @@ function ProjectCard({ project }: ProjectCardProps) {
           </span>
         </div>
         <div className="flex-shrink-0">
-          {project.is_support ? (
+          {project.project_type === 'support' ? (
             <StatusBadge label="Soporte" variant="warning" />
+          ) : project.project_type === 'internal' ? (
+            <StatusBadge label="Interno" variant="neutral" />
           ) : (
-            <StatusBadge label="Normal" variant="neutral" />
+            <StatusBadge label="Cliente" variant="info" />
           )}
         </div>
       </div>
@@ -110,16 +112,34 @@ function ProjectCard({ project }: ProjectCardProps) {
         </div>
       </div>
 
-      {/* Active cycle */}
-      <div className="flex items-center gap-1.5 text-xs text-slate-500 border-t border-slate-100 pt-3 -mb-1">
-        <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-        </svg>
-        {project.active_cycle ? (
-          <span className="truncate font-medium text-blue-600">{project.active_cycle}</span>
-        ) : (
-          <span className="italic text-slate-400">Sin ciclo activo</span>
+      {/* Dates + Active cycle */}
+      <div className="flex flex-col gap-2 border-t border-slate-100 pt-3 -mb-1">
+        {(project.project_start_date || project.project_end_date) && (
+          <div className="flex items-center gap-1.5 text-xs text-slate-500">
+            <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <span>
+              {project.project_start_date
+                ? new Date(project.project_start_date + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
+                : '—'}
+              {' → '}
+              {project.project_end_date
+                ? new Date(project.project_end_date + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })
+                : '—'}
+            </span>
+          </div>
         )}
+        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+          <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          {project.active_cycle ? (
+            <span className="truncate font-medium text-blue-600">{project.active_cycle}</span>
+          ) : (
+            <span className="italic text-slate-400">Sin ciclo activo</span>
+          )}
+        </div>
       </div>
     </Link>
   );
@@ -136,14 +156,14 @@ export default function ProjectsPage() {
   const { data, isLoading, isError } = useProjects();
 
   const [search, setSearch] = useState('');
-  const [supportFilter, setSupportFilter] = useState<SupportFilter>('all');
+  const [typeFilter, setTypeFilter] = useState<ProjectTypeFilter>('all');
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDir, setSortDir] = useState<SortDirection>('asc');
 
   const projects = data?.projects ?? [];
 
   const filtered = useMemo(() => {
-    let result = [...projects];
+    let result = projects.filter((p) => !p.is_archived);
 
     // Search filter
     if (search.trim()) {
@@ -155,11 +175,9 @@ export default function ProjectsPage() {
       );
     }
 
-    // Support filter
-    if (supportFilter === 'support') {
-      result = result.filter((p) => p.is_support);
-    } else if (supportFilter === 'no-support') {
-      result = result.filter((p) => !p.is_support);
+    // Type filter
+    if (typeFilter !== 'all') {
+      result = result.filter((p) => p.project_type === typeFilter);
     }
 
     // Sort
@@ -174,7 +192,7 @@ export default function ProjectsPage() {
     });
 
     return result;
-  }, [projects, search, supportFilter, sortField, sortDir]);
+  }, [projects, search, typeFilter, sortField, sortDir]);
 
   const toggleSort = (field: SortField) => {
     if (sortField === field) {
@@ -213,20 +231,21 @@ export default function ProjectsPage() {
           />
         </div>
 
-        {/* Support filter tabs */}
+        {/* Type filter tabs */}
         <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
           {(
             [
               { value: 'all', label: 'Todos' },
-              { value: 'support', label: 'En Soporte' },
-              { value: 'no-support', label: 'Sin Soporte' },
-            ] as { value: SupportFilter; label: string }[]
+              { value: 'client', label: 'Clientes' },
+              { value: 'support', label: 'Soporte' },
+              { value: 'internal', label: 'Internos' },
+            ] as { value: ProjectTypeFilter; label: string }[]
           ).map((tab) => (
             <button
               key={tab.value}
-              onClick={() => setSupportFilter(tab.value)}
+              onClick={() => setTypeFilter(tab.value)}
               className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${
-                supportFilter === tab.value
+                typeFilter === tab.value
                   ? 'bg-white text-slate-900 shadow-sm'
                   : 'text-slate-500 hover:text-slate-700'
               }`}
@@ -271,9 +290,9 @@ export default function ProjectsPage() {
       {/* Results count */}
       {!isLoading && !isError && (
         <p className="text-sm text-slate-500">
-          {filtered.length === projects.length
-            ? `${projects.length} proyecto${projects.length !== 1 ? 's' : ''}`
-            : `${filtered.length} de ${projects.length} proyectos`}
+          {filtered.length === projects.filter((p) => !p.is_archived).length
+            ? `${filtered.length} proyecto${filtered.length !== 1 ? 's' : ''}`
+            : `${filtered.length} de ${projects.filter((p) => !p.is_archived).length} proyectos`}
         </p>
       )}
 
@@ -338,7 +357,7 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {/* Project grid */}
+      {/* Active projects grid */}
       {!isLoading && !isError && filtered.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((project) => (
@@ -346,6 +365,7 @@ export default function ProjectsPage() {
           ))}
         </div>
       )}
+
     </div>
   );
 }

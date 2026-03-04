@@ -26,6 +26,7 @@ export interface ProjectMetrics {
   total_bugs: number;
   active_cycle: string | null;
   is_support: boolean;
+  project_type: 'client' | 'support' | 'internal';
 }
 
 export function useOverviewMetrics() {

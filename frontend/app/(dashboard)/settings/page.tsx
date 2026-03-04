@@ -6,6 +6,9 @@ import { DataTable, TableColumn } from '@/components/DataTable';
 import { StatusBadge } from '@/components/StatusBadge';
 import { TableSkeleton } from '@/components/Skeleton';
 import { useSyncSchedule, useUpdateSyncSchedule, useSyncHistory, SyncLog } from '@/hooks/useSettings';
+import { useTeamMembers, useUpdateGithubUsername, useUpdateTeamMember, useGitHubOrgMembers, TeamMember, GitHubOrgMember } from '@/hooks/useTeamMembers';
+import { useGitHubRepos, useUpdateGitHubRepo } from '@/hooks/useGitHubRepos';
+import { useProjectsList, useUpdateProjectType, ProjectType } from '@/hooks/useProjectSettings';
 
 // Common timezones list
 const TIMEZONES = [
@@ -123,10 +126,224 @@ function toSyncLogRow(log: SyncLog): SyncLogRow {
   return { ...log } as SyncLogRow;
 }
 
+function GitHubLinkRow({
+  member,
+  ghMembers,
+  alreadyLinked,
+  onSave,
+  onToggleActive,
+}: {
+  member: TeamMember;
+  ghMembers: GitHubOrgMember[];
+  alreadyLinked: Set<string>;
+  onSave: (id: number, username: string | null) => void;
+  onToggleActive: (id: number, isActive: boolean) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [filter, setFilter] = useState('');
+
+  // Available GitHub members for dropdown: not yet linked by another team member
+  const available = ghMembers.filter(
+    (gh) =>
+      !alreadyLinked.has(gh.login.toLowerCase()) ||
+      gh.login.toLowerCase() === (member.github_username ?? '').toLowerCase(),
+  );
+
+  const filtered = filter
+    ? available.filter((gh) =>
+        gh.login.toLowerCase().includes(filter.toLowerCase()),
+      )
+    : available;
+
+  function handleSelect(login: string) {
+    onSave(member.id, login);
+    setEditing(false);
+    setFilter('');
+  }
+
+  function handleUnlink() {
+    onSave(member.id, null);
+  }
+
+  function handleCancel() {
+    setEditing(false);
+    setFilter('');
+  }
+
+  return (
+    <tr className="border-b border-slate-100 last:border-0">
+      <td className="py-3 px-4">
+        <div className="flex items-center gap-3">
+          {member.avatar_url ? (
+            <img
+              src={member.avatar_url}
+              alt={member.name}
+              className="w-8 h-8 rounded-full object-cover"
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-medium text-slate-500">
+              {member.name.charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div>
+            <p className="text-sm font-medium text-slate-800">{member.name}</p>
+            {member.email && (
+              <p className="text-xs text-slate-400">{member.email}</p>
+            )}
+          </div>
+        </div>
+      </td>
+      <td className="py-3 px-4 relative">
+        {editing ? (
+          <div className="relative">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder="Buscar usuario de GitHub..."
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') handleCancel();
+                }}
+                className="w-56 rounded-lg border border-blue-400 px-3 py-1.5 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                onClick={handleCancel}
+                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 transition-colors"
+                title="Cancelar"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="absolute z-10 mt-1 w-56 max-h-48 overflow-y-auto bg-white border border-slate-200 rounded-lg shadow-lg">
+              {filtered.length === 0 ? (
+                <p className="text-xs text-slate-400 p-3 text-center">
+                  No se encontraron usuarios
+                </p>
+              ) : (
+                filtered.map((gh) => (
+                  <button
+                    key={gh.login}
+                    onClick={() => handleSelect(gh.login)}
+                    className="w-full text-left px-3 py-2 hover:bg-blue-50 flex items-center gap-2 transition-colors"
+                  >
+                    {gh.avatar_url ? (
+                      <img
+                        src={gh.avatar_url}
+                        alt={gh.login}
+                        className="w-5 h-5 rounded-full"
+                      />
+                    ) : (
+                      <div className="w-5 h-5 rounded-full bg-slate-200" />
+                    )}
+                    <span className="text-sm text-slate-700 font-mono">
+                      {gh.login}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            {member.github_username ? (
+              <>
+                <span className="text-sm text-slate-700 font-mono">@{member.github_username}</span>
+                <button
+                  onClick={() => setEditing(true)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                  title="Cambiar"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </button>
+                <button
+                  onClick={handleUnlink}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                  title="Desvincular"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setEditing(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-blue-600 border border-blue-200 hover:bg-blue-50 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                Vincular
+              </button>
+            )}
+          </div>
+        )}
+      </td>
+      <td className="py-3 px-4">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={member.is_active}
+          onClick={() => onToggleActive(member.id, !member.is_active)}
+          className={`
+            relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none
+            focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+            ${member.is_active ? 'bg-emerald-500' : 'bg-slate-300'}
+          `}
+          title={member.is_active ? 'Activo — clic para desactivar' : 'Inactivo — clic para activar'}
+        >
+          <span
+            className={`
+              inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform
+              ${member.is_active ? 'translate-x-5' : 'translate-x-0.5'}
+            `}
+          />
+        </button>
+      </td>
+    </tr>
+  );
+}
+
 export default function SettingsPage() {
   const scheduleQuery = useSyncSchedule();
   const updateMutation = useUpdateSyncSchedule();
   const historyQuery = useSyncHistory();
+  const teamMembersQuery = useTeamMembers();
+  const ghOrgMembersQuery = useGitHubOrgMembers();
+  const updateGithubMutation = useUpdateGithubUsername();
+  const updateMemberMutation = useUpdateTeamMember();
+  const reposQuery = useGitHubRepos();
+  const updateRepoMutation = useUpdateGitHubRepo();
+  const projectsSettingsQuery = useProjectsList();
+  const updateProjectTypeMutation = useUpdateProjectType();
+
+  const [linkSaveSuccess, setLinkSaveSuccess] = useState<number | null>(null);
+  const [linkSaveError, setLinkSaveError] = useState<string | null>(null);
+
+  async function handleGithubSave(memberId: number, username: string | null) {
+    setLinkSaveError(null);
+    try {
+      await updateGithubMutation.mutateAsync({ memberId, github_username: username });
+      setLinkSaveSuccess(memberId);
+      setTimeout(() => setLinkSaveSuccess(null), 2000);
+    } catch {
+      setLinkSaveError('No se pudo guardar. Verifica el nombre de usuario e intenta de nuevo.');
+    }
+  }
+
+  async function handleToggleActive(memberId: number, isActive: boolean) {
+    try {
+      await updateMemberMutation.mutateAsync({ memberId, is_active: isActive });
+    } catch {
+      setLinkSaveError('No se pudo cambiar el estado del miembro.');
+    }
+  }
 
   // Form state
   const [enabled, setEnabled] = useState(false);
@@ -347,6 +564,264 @@ export default function SettingsPage() {
                 )}
               </button>
             </div>
+          </div>
+        )}
+      </section>
+
+      {/* GitHub Linking Section */}
+      <section className="card p-6 space-y-4">
+        <div>
+          <h3 className="text-base font-semibold text-slate-800">Vincular Usuarios de GitHub</h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Vincula cada miembro del equipo (Plane) con su usuario de GitHub para integrar las métricas de commits y pull requests.
+          </p>
+        </div>
+
+        {linkSaveError && (
+          <div className="rounded-lg bg-red-50 border border-red-200 p-3 flex items-start gap-2">
+            <svg className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <p className="text-sm text-red-700">{linkSaveError}</p>
+          </div>
+        )}
+
+        {linkSaveSuccess && (
+          <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 flex items-center gap-2">
+            <svg className="w-4 h-4 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <p className="text-sm text-emerald-700 font-medium">Usuario de GitHub actualizado.</p>
+          </div>
+        )}
+
+        {teamMembersQuery.isLoading ? (
+          <div className="space-y-3 animate-pulse">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-12 bg-slate-100 rounded-lg" />
+            ))}
+          </div>
+        ) : teamMembersQuery.error ? (
+          <div className="rounded-lg bg-red-50 border border-red-200 p-4">
+            <p className="text-sm text-red-700">No se pudo cargar la lista de miembros.</p>
+            <button
+              onClick={() => teamMembersQuery.refetch()}
+              className="mt-2 text-sm text-red-600 underline hover:text-red-800"
+            >
+              Reintentar
+            </button>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            {ghOrgMembersQuery.isLoading && (
+              <p className="text-xs text-slate-400 mb-2">Cargando usuarios de GitHub...</p>
+            )}
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-200">
+                  <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wide py-2 px-4">
+                    Miembro (Plane)
+                  </th>
+                  <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wide py-2 px-4">
+                    Usuario GitHub
+                  </th>
+                  <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wide py-2 px-4">
+                    Activo
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const ghMembers = ghOrgMembersQuery.data ?? [];
+                  const alreadyLinked = new Set(
+                    (teamMembersQuery.data ?? [])
+                      .filter((m) => m.github_username)
+                      .map((m) => m.github_username!.toLowerCase()),
+                  );
+                  return (teamMembersQuery.data ?? []).map((member) => (
+                    <GitHubLinkRow
+                      key={member.id}
+                      member={member}
+                      ghMembers={ghMembers}
+                      alreadyLinked={alreadyLinked}
+                      onSave={handleGithubSave}
+                      onToggleActive={handleToggleActive}
+                    />
+                  ));
+                })()}
+              </tbody>
+            </table>
+            {(teamMembersQuery.data ?? []).length === 0 && (
+              <p className="text-sm text-slate-400 text-center py-6">
+                No hay miembros del equipo. Ejecuta una sincronización primero.
+              </p>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* Project Type Section */}
+      <section className="card p-6 space-y-4">
+        <div>
+          <h3 className="text-base font-semibold text-slate-800">Tipo de Proyecto</h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Clasifica cada proyecto como Cliente, Soporte o Interno para filtrar las métricas.
+          </p>
+        </div>
+
+        {projectsSettingsQuery.isLoading ? (
+          <div className="space-y-3 animate-pulse">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-10 bg-slate-100 rounded-lg" />
+            ))}
+          </div>
+        ) : projectsSettingsQuery.error ? (
+          <div className="rounded-lg bg-red-50 border border-red-200 p-4">
+            <p className="text-sm text-red-700">No se pudo cargar la lista de proyectos.</p>
+            <button
+              onClick={() => projectsSettingsQuery.refetch()}
+              className="mt-2 text-sm text-red-600 underline hover:text-red-800"
+            >
+              Reintentar
+            </button>
+          </div>
+        ) : (projectsSettingsQuery.data ?? []).length === 0 ? (
+          <p className="text-sm text-slate-400 text-center py-6">
+            No hay proyectos registrados. Ejecuta una sincronización primero.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-200">
+                  <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wide py-2 px-4">
+                    Proyecto
+                  </th>
+                  <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wide py-2 px-4">
+                    Tipo
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {(projectsSettingsQuery.data ?? []).map((proj) => (
+                  <tr key={proj.id} className="border-b border-slate-100 last:border-0">
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-slate-800">{proj.name}</span>
+                        {proj.identifier && (
+                          <span className="text-xs font-mono text-slate-400">{proj.identifier}</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <select
+                        value={proj.project_type}
+                        onChange={(e) =>
+                          updateProjectTypeMutation.mutate({
+                            projectId: proj.id,
+                            project_type: e.target.value as ProjectType,
+                          })
+                        }
+                        className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="client">Cliente</option>
+                        <option value="support">Soporte</option>
+                        <option value="internal">Interno</option>
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* GitHub Repositories Section */}
+      <section className="card p-6 space-y-4">
+        <div>
+          <h3 className="text-base font-semibold text-slate-800">Repositorios GitHub</h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Desactiva repositorios legacy o irrelevantes para excluirlos de las métricas.
+          </p>
+        </div>
+
+        {reposQuery.isLoading ? (
+          <div className="space-y-3 animate-pulse">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-10 bg-slate-100 rounded-lg" />
+            ))}
+          </div>
+        ) : reposQuery.error ? (
+          <div className="rounded-lg bg-red-50 border border-red-200 p-4">
+            <p className="text-sm text-red-700">No se pudo cargar la lista de repositorios.</p>
+            <button
+              onClick={() => reposQuery.refetch()}
+              className="mt-2 text-sm text-red-600 underline hover:text-red-800"
+            >
+              Reintentar
+            </button>
+          </div>
+        ) : (reposQuery.data ?? []).length === 0 ? (
+          <p className="text-sm text-slate-400 text-center py-6">
+            No hay repositorios registrados. Ejecuta una sincronización de GitHub primero.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-200">
+                  <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wide py-2 px-4">
+                    Repositorio
+                  </th>
+                  <th className="text-left text-xs font-medium text-slate-500 uppercase tracking-wide py-2 px-4">
+                    Activo en métricas
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {(reposQuery.data ?? []).map((repo) => (
+                  <tr key={repo.id} className="border-b border-slate-100 last:border-0">
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                        </svg>
+                        <span className={`text-sm font-mono ${repo.is_active ? 'text-slate-800' : 'text-slate-400'}`}>
+                          {repo.repo_name}
+                        </span>
+                        {!repo.is_active && (
+                          <span className="text-xs bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
+                            Excluido
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={repo.is_active}
+                        onClick={() => updateRepoMutation.mutate({ repoId: repo.id, is_active: !repo.is_active })}
+                        className={`
+                          relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none
+                          focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+                          ${repo.is_active ? 'bg-emerald-500' : 'bg-slate-300'}
+                        `}
+                        title={repo.is_active ? 'Activo — clic para excluir de métricas' : 'Excluido — clic para incluir en métricas'}
+                      >
+                        <span
+                          className={`
+                            inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform
+                            ${repo.is_active ? 'translate-x-5' : 'translate-x-0.5'}
+                          `}
+                        />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </section>

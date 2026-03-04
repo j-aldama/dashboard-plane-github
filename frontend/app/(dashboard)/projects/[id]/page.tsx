@@ -8,20 +8,18 @@ import { MetricCard } from '@/components/MetricCard';
 import { DataTable, TableColumn } from '@/components/DataTable';
 import { MetricCardSkeleton, TableSkeleton, Skeleton } from '@/components/Skeleton';
 import { StatusBadge } from '@/components/StatusBadge';
-import { useProjectDetail, CycleTask, LabelBreakdown } from '@/hooks/useProjectDetail';
+import { useProjectDetail, WorkItemSummary, LabelBreakdown } from '@/hooks/useProjectDetail';
 
 // ---------------------------------------------------------------------------
 // Types for DataTable rows (must extend Record<string, unknown>)
 // ---------------------------------------------------------------------------
 
-type CycleTaskRow = Record<string, unknown> & {
+type WorkItemRow = Record<string, unknown> & {
   id: number;
   title: string;
   state: string;
-  assignee: string | null;
+  assignee_name: string | null;
   priority: string | null;
-  is_bug: boolean;
-  is_client_blocker: boolean;
 };
 
 type LabelRow = Record<string, unknown> & {
@@ -33,31 +31,12 @@ type LabelRow = Record<string, unknown> & {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function toCycleTaskRow(t: CycleTask): CycleTaskRow {
-  return { ...t } as CycleTaskRow;
+function toWorkItemRow(w: WorkItemSummary): WorkItemRow {
+  return { ...w } as WorkItemRow;
 }
 
 function toLabelRow(l: LabelBreakdown): LabelRow {
   return { ...l } as LabelRow;
-}
-
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '—';
-  try {
-    return new Date(dateStr).toLocaleDateString('es-AR', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  } catch {
-    return dateStr;
-  }
-}
-
-function daysRemaining(endDate: string | null): number | null {
-  if (!endDate) return null;
-  const diff = new Date(endDate).getTime() - Date.now();
-  return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
 
 function priorityVariant(priority: string | null): 'error' | 'warning' | 'info' | 'neutral' {
@@ -89,26 +68,14 @@ function stateVariant(
 // Columns
 // ---------------------------------------------------------------------------
 
-const taskColumns: TableColumn<CycleTaskRow>[] = [
+const workItemColumns: TableColumn<WorkItemRow>[] = [
   {
     key: 'title',
     label: 'Tarea',
     sortable: true,
-    render: (value, row) => (
+    render: (value) => (
       <div className="max-w-xs">
         <span className="font-medium text-slate-800 line-clamp-2">{String(value)}</span>
-        <div className="flex items-center gap-1 mt-0.5">
-          {(row.is_bug as boolean) && (
-            <span className="inline-flex items-center px-1.5 py-0 rounded text-xs font-medium bg-red-100 text-red-600">
-              Bug
-            </span>
-          )}
-          {(row.is_client_blocker as boolean) && (
-            <span className="inline-flex items-center px-1.5 py-0 rounded text-xs font-medium bg-orange-100 text-orange-600">
-              Bloqueo
-            </span>
-          )}
-        </div>
       </div>
     ),
   },
@@ -121,7 +88,7 @@ const taskColumns: TableColumn<CycleTaskRow>[] = [
     ),
   },
   {
-    key: 'assignee',
+    key: 'assignee_name',
     label: 'Asignado',
     render: (value) =>
       value ? (
@@ -193,10 +160,10 @@ function CycleSectionSkeleton() {
 // Tab type
 // ---------------------------------------------------------------------------
 
-type TabId = 'tasks' | 'labels' | 'bugs' | 'blockers';
+type TabId = 'labels' | 'bugs' | 'blockers' | 'pending';
 
 const TABS: { id: TabId; label: string }[] = [
-  { id: 'tasks', label: 'Tareas del Ciclo' },
+  { id: 'pending', label: 'Pendientes' },
   { id: 'labels', label: 'Labels' },
   { id: 'bugs', label: 'Bugs' },
   { id: 'blockers', label: 'Bloqueos Cliente' },
@@ -212,21 +179,15 @@ export default function ProjectDetailPage() {
 
   const { data, isLoading, isError, refetch } = useProjectDetail(projectId);
 
-  const [activeTab, setActiveTab] = useState<TabId>('tasks');
+  const [activeTab, setActiveTab] = useState<TabId>('pending');
 
-  // Filtered lists derived from cycle_tasks
-  const allTasks = data?.cycle_tasks ?? [];
-  const bugTasks = allTasks.filter((t) => t.is_bug);
-  const blockerTasks = allTasks.filter((t) => t.is_client_blocker);
+  const bugItems = data?.bugs ?? [];
+  const blockerItems = data?.client_blocked ?? [];
   const labelBreakdown = data?.label_breakdown ?? [];
+  const pendingItems = data?.pending_items ?? [];
 
-  const cycle = data?.active_cycle ?? null;
-  const cyclePct =
-    cycle && cycle.total_tasks > 0
-      ? Math.round((cycle.completed_tasks / cycle.total_tasks) * 100)
-      : 0;
-
-  const daysLeft = cycle ? daysRemaining(cycle.end_date) : null;
+  const cycleName = data?.active_cycle ?? null;
+  // active_cycle is now a string (cycle name) or null
 
   // ------------------------------------------------------------------
   // Loading state
@@ -325,8 +286,8 @@ export default function ProjectDetailPage() {
           {data.identifier}
         </span>
         <StatusBadge
-          label={data.is_support ? 'Soporte' : 'Producto'}
-          variant={data.is_support ? 'warning' : 'info'}
+          label={data.project_type === 'support' ? 'Soporte' : data.project_type === 'internal' ? 'Interno' : 'Cliente'}
+          variant={data.project_type === 'support' ? 'warning' : data.project_type === 'internal' ? 'neutral' : 'info'}
         />
         <Link
           href="/projects"
@@ -338,6 +299,30 @@ export default function ProjectDetailPage() {
           Proyectos
         </Link>
       </PageHeader>
+
+      {/* ----------------------------------------------------------------
+          Fechas del proyecto
+      ---------------------------------------------------------------- */}
+      {(data.project_start_date || data.project_end_date) && (
+        <section className="flex items-center gap-3 text-sm text-slate-600">
+          <svg className="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <span className="font-medium text-slate-500">Inicio:</span>
+          <span>
+            {data.project_start_date
+              ? new Date(data.project_start_date + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })
+              : 'Sin definir'}
+          </span>
+          <span className="text-slate-300">|</span>
+          <span className="font-medium text-slate-500">Fin:</span>
+          <span>
+            {data.project_end_date
+              ? new Date(data.project_end_date + 'T00:00:00').toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' })
+              : 'Sin definir'}
+          </span>
+        </section>
+      )}
 
       {/* ----------------------------------------------------------------
           Metric Cards (7)
@@ -370,7 +355,7 @@ export default function ProjectDetailPage() {
         />
         <MetricCard
           title="Bloqueos Cliente"
-          value={data.total_client_blockers}
+          value={blockerItems.length}
         />
       </section>
 
@@ -379,78 +364,24 @@ export default function ProjectDetailPage() {
       ---------------------------------------------------------------- */}
       <section>
         <h3 className="text-base font-semibold text-slate-800 mb-3">Ciclo Activo</h3>
-        {cycle ? (
-          <div className="card p-6 space-y-4">
-            {/* Cycle header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <svg
-                  className="w-4 h-4 text-blue-500 flex-shrink-0"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                  />
-                </svg>
-                <span className="font-semibold text-slate-900">{cycle.name}</span>
-                <StatusBadge label="Activo" variant="in-progress" />
-              </div>
-              {daysLeft !== null && (
-                <span
-                  className={`text-sm font-medium ${daysLeft < 0 ? 'text-red-500' : daysLeft <= 3 ? 'text-amber-500' : 'text-slate-500'}`}
-                >
-                  {daysLeft < 0
-                    ? `Vencido hace ${Math.abs(daysLeft)} día${Math.abs(daysLeft) !== 1 ? 's' : ''}`
-                    : daysLeft === 0
-                    ? 'Vence hoy'
-                    : `${daysLeft} día${daysLeft !== 1 ? 's' : ''} restante${daysLeft !== 1 ? 's' : ''}`}
-                </span>
-              )}
-            </div>
-
-            {/* Cycle dates */}
-            <div className="flex flex-wrap items-center gap-4 text-sm text-slate-500">
-              <span>
-                <span className="font-medium text-slate-700">Inicio:</span>{' '}
-                {formatDate(cycle.start_date)}
-              </span>
-              <span>
-                <span className="font-medium text-slate-700">Fin:</span>{' '}
-                {formatDate(cycle.end_date)}
-              </span>
-              <span>
-                <span className="font-medium text-slate-700">Tareas:</span>{' '}
-                {cycle.completed_tasks}
-                <span className="text-slate-400">/{cycle.total_tasks}</span>
-              </span>
-            </div>
-
-            {/* Progress bar */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs text-slate-500">Progreso del ciclo</span>
-                <span className="text-xs font-semibold text-slate-700">{cyclePct}%</span>
-              </div>
-              <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                  style={{ width: `${cyclePct}%` }}
+        {cycleName ? (
+          <div className="card p-6">
+            <div className="flex items-center gap-2">
+              <svg
+                className="w-4 h-4 text-blue-500 flex-shrink-0"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                 />
-              </div>
-              <div className="flex items-center justify-between mt-1">
-                <span className="text-xs text-emerald-600">
-                  {cycle.completed_tasks} completada{cycle.completed_tasks !== 1 ? 's' : ''}
-                </span>
-                <span className="text-xs text-slate-400">
-                  {cycle.total_tasks - cycle.completed_tasks} pendiente
-                  {cycle.total_tasks - cycle.completed_tasks !== 1 ? 's' : ''}
-                </span>
-              </div>
+              </svg>
+              <span className="font-semibold text-slate-900">{cycleName}</span>
+              <StatusBadge label="Activo" variant="in-progress" />
             </div>
           </div>
         ) : (
@@ -484,13 +415,13 @@ export default function ProjectDetailPage() {
         <div className="flex items-center gap-1 border-b border-slate-200 mb-4 overflow-x-auto">
           {TABS.map((tab) => {
             const count =
-              tab.id === 'tasks'
-                ? allTasks.length
+              tab.id === 'pending'
+                ? pendingItems.length
                 : tab.id === 'labels'
                 ? labelBreakdown.length
                 : tab.id === 'bugs'
-                ? bugTasks.length
-                : blockerTasks.length;
+                ? bugItems.length
+                : blockerItems.length;
 
             return (
               <button
@@ -520,11 +451,11 @@ export default function ProjectDetailPage() {
         </div>
 
         {/* Tab content */}
-        {activeTab === 'tasks' && (
-          <DataTable<CycleTaskRow>
-            columns={taskColumns}
-            data={allTasks.map(toCycleTaskRow)}
-            emptyMessage="No hay tareas en el ciclo activo."
+        {activeTab === 'pending' && (
+          <DataTable<WorkItemRow>
+            columns={workItemColumns}
+            data={pendingItems.map(toWorkItemRow)}
+            emptyMessage="No hay tareas pendientes en este proyecto."
           />
         )}
 
@@ -537,18 +468,18 @@ export default function ProjectDetailPage() {
         )}
 
         {activeTab === 'bugs' && (
-          <DataTable<CycleTaskRow>
-            columns={taskColumns}
-            data={bugTasks.map(toCycleTaskRow)}
-            emptyMessage="No hay bugs en el ciclo activo."
+          <DataTable<WorkItemRow>
+            columns={workItemColumns}
+            data={bugItems.map(toWorkItemRow)}
+            emptyMessage="No hay bugs en este proyecto."
           />
         )}
 
         {activeTab === 'blockers' && (
-          <DataTable<CycleTaskRow>
-            columns={taskColumns}
-            data={blockerTasks.map(toCycleTaskRow)}
-            emptyMessage="No hay bloqueos de cliente en el ciclo activo."
+          <DataTable<WorkItemRow>
+            columns={workItemColumns}
+            data={blockerItems.map(toWorkItemRow)}
+            emptyMessage="No hay bloqueos de cliente en este proyecto."
           />
         )}
       </section>

@@ -20,6 +20,7 @@ type ProjectRow = Record<string, unknown> & {
   total_bugs: number;
   active_cycle: string | null;
   is_support: boolean;
+  project_type: 'client' | 'support' | 'internal';
 };
 
 const projectColumns: TableColumn<ProjectRow>[] = [
@@ -87,13 +88,14 @@ const projectColumns: TableColumn<ProjectRow>[] = [
     },
   },
   {
-    key: 'is_support',
+    key: 'project_type',
     label: 'Tipo',
-    render: (value) => (
-      value
-        ? <StatusBadge label="Soporte" variant="warning" />
-        : <StatusBadge label="Producto" variant="info" />
-    ),
+    render: (value) => {
+      const pt = value as string;
+      if (pt === 'support') return <StatusBadge label="Soporte" variant="warning" />;
+      if (pt === 'internal') return <StatusBadge label="Interno" variant="neutral" />;
+      return <StatusBadge label="Cliente" variant="info" />;
+    },
   },
 ];
 
@@ -115,7 +117,7 @@ export default function OverviewPage() {
   const projectsError = projectsQuery.error;
 
   const chartData = projects.map((p) => ({
-    name: p.identifier || p.name,
+    name: p.name || p.identifier,
     Completadas: p.completed_tasks,
     Pendientes: p.pending_tasks,
   }));

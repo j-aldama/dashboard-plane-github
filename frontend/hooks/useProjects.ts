@@ -15,6 +15,10 @@ export interface ProjectItem {
   total_bugs: number;
   active_cycle: string | null;
   is_support: boolean;
+  project_type: 'client' | 'support' | 'internal';
+  is_archived: boolean;
+  project_start_date: string | null;
+  project_end_date: string | null;
 }
 
 export function useProjects() {
