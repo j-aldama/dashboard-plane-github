@@ -23,11 +23,15 @@ class Project(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     identifier: Mapped[str | None] = mapped_column(String(50), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    project_type: Mapped[str] = mapped_column(
+        String(20), default="client", server_default="client", nullable=False
+    )
     is_support: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     support_start_date: Mapped[Date | None] = mapped_column(Date, nullable=True)
     support_end_date: Mapped[Date | None] = mapped_column(Date, nullable=True)
     project_start_date: Mapped[Date | None] = mapped_column(Date, nullable=True)
     project_end_date: Mapped[Date | None] = mapped_column(Date, nullable=True)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
 
     # Relationships
     cycles: Mapped[list[Cycle]] = relationship(
