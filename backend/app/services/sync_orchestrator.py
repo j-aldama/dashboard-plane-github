@@ -35,12 +35,27 @@ SYNC_STEPS: list[dict[str, Any]] = [
     {"id": "github", "label": "Sincronizando GitHub", "fn": sync_github},
 ]
 
-STEP_TIMEOUT = 120  # seconds per step
+# Per-step timeout — GitHub can take 20+ minutes for large orgs
+STEP_TIMEOUTS: dict[str, int] = {
+    "members": 120,
+    "projects": 300,
+    "work_items": 600,
+    "github": 1800,
+}
+DEFAULT_TIMEOUT = 300
 
 
 def _event(event_type: str, data: dict[str, Any]) -> dict[str, str]:
     """Build an SSE-compatible event dict."""
     return {"event": event_type, "data": json.dumps(data)}
+
+
+async def _safe_rollback(db: AsyncSession) -> None:
+    """Rollback the session, ignoring errors if already clean."""
+    try:
+        await db.rollback()
+    except Exception:
+        pass
 
 
 async def run_full_sync(db: AsyncSession) -> AsyncGenerator[dict[str, str], None]:
@@ -59,6 +74,7 @@ async def run_full_sync(db: AsyncSession) -> AsyncGenerator[dict[str, str], None
     db.add(sync_log)
     await db.commit()
     await db.refresh(sync_log)
+    sync_log_id = sync_log.id
 
     total_steps = len(SYNC_STEPS)
     results: dict[str, Any] = {}
@@ -75,6 +91,7 @@ async def run_full_sync(db: AsyncSession) -> AsyncGenerator[dict[str, str], None
     for i, step in enumerate(SYNC_STEPS):
         step_id: str = step["id"]
         step_label: str = step["label"]
+        timeout = STEP_TIMEOUTS.get(step_id, DEFAULT_TIMEOUT)
 
         yield _event(
             "step_start",
@@ -87,7 +104,7 @@ async def run_full_sync(db: AsyncSession) -> AsyncGenerator[dict[str, str], None
         )
 
         try:
-            result = await asyncio.wait_for(step["fn"](db), timeout=STEP_TIMEOUT)
+            result = await asyncio.wait_for(step["fn"](db), timeout=timeout)
             results[step_id] = result
 
             yield _event(
@@ -101,9 +118,10 @@ async def run_full_sync(db: AsyncSession) -> AsyncGenerator[dict[str, str], None
             )
 
         except asyncio.TimeoutError:
-            error_msg = f"Timeout after {STEP_TIMEOUT}s"
-            logger.error("Sync step %s timed out after %ds", step_id, STEP_TIMEOUT)
+            error_msg = f"Timeout after {timeout}s"
+            logger.error("Sync step %s timed out after %ds", step_id, timeout)
             errors.append({"step": step_id, "error": error_msg})
+            await _safe_rollback(db)
 
             yield _event(
                 "step_error",
@@ -123,6 +141,7 @@ async def run_full_sync(db: AsyncSession) -> AsyncGenerator[dict[str, str], None
                 exc_info=True,
             )
             errors.append({"step": step_id, "error": "Error en sincronización"})
+            await _safe_rollback(db)
 
             yield _event(
                 "step_error",
@@ -135,16 +154,33 @@ async def run_full_sync(db: AsyncSession) -> AsyncGenerator[dict[str, str], None
                 },
             )
 
-    # Persist sync log outcome
-    sync_log.completed_at = datetime.now(timezone.utc)
-    if errors:
-        # All steps failed → "failed"; some steps failed → "completed" (partial)
-        sync_log.status = "failed" if len(errors) == total_steps else "completed"
-        sync_log.error_message = json.dumps(errors)
-    else:
-        sync_log.status = "completed"
+    # Persist sync log outcome — re-fetch after potential rollbacks
+    try:
+        from sqlalchemy import select
 
-    await db.commit()
+        result = await db.execute(
+            select(SyncLog).where(SyncLog.id == sync_log_id)
+        )
+        sync_log = result.scalar_one()
+
+        sync_log.completed_at = datetime.now(timezone.utc)
+        if errors:
+            sync_log.status = "failed" if len(errors) == total_steps else "completed"
+            sync_log.error_message = json.dumps(errors)
+        else:
+            sync_log.status = "completed"
+
+        await db.commit()
+        duration = (sync_log.completed_at - sync_log.started_at).total_seconds()
+        logger.info(
+            "Sync log #%d finalised as %r in %.1fs",
+            sync_log_id,
+            sync_log.status,
+            duration,
+        )
+    except Exception as exc:
+        logger.error("Failed to persist sync log: %s", exc)
+        await _safe_rollback(db)
 
     # Determine overall status for the final event
     if not errors:

@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models.github_commit import GitHubCommit
 from app.models.github_pull_request import GitHubPullRequest
+from app.models.github_repository import GitHubRepository
 from app.models.team_member import TeamMember
 
 logger = logging.getLogger(__name__)
@@ -151,6 +152,35 @@ async def _fetch_org_repos(
     return repos
 
 
+async def _ensure_repos_in_config(
+    db: AsyncSession,
+    repos: list[dict[str, Any]],
+) -> None:
+    """Ensure all fetched repos exist in the github_repositories config table.
+
+    New repos are inserted with is_active=True. Existing repos keep their
+    current is_active value untouched.
+    """
+    if not repos:
+        return
+
+    result = await db.execute(select(GitHubRepository.repo_name))
+    existing_names = {row[0] for row in result.all()}
+
+    new_count = 0
+    for repo_data in repos:
+        name = repo_data.get("name", "")
+        if not name or name in existing_names:
+            continue
+        db.add(GitHubRepository(repo_name=name, is_active=True))
+        existing_names.add(name)
+        new_count += 1
+
+    if new_count > 0:
+        await db.flush()
+        logger.info("Registered %d new repo(s) in github_repositories config", new_count)
+
+
 # ------------------------------------------------------------------
 # Incremental sync date helpers
 # ------------------------------------------------------------------
@@ -236,6 +266,7 @@ async def _sync_commits_for_member_repo(
         committed_at = _parse_iso_datetime(committed_at_str)
 
         if existing is not None:
+            existing.team_member_id = member.id
             existing.message = message
             existing.lines_added = lines_added
             existing.lines_removed = lines_removed
@@ -311,6 +342,7 @@ async def _sync_prs_for_member_repo(
         merged_at = _parse_iso_datetime(pr_data.get("merged_at"))
 
         if existing is not None:
+            existing.team_member_id = member.id
             existing.title = title
             existing.state = state
             existing.merged_at = merged_at
@@ -404,6 +436,9 @@ async def sync_github(db: AsyncSession) -> dict[str, int]:
         if not repos:
             logger.info("No repos found in org '%s'", settings.GITHUB_ORG)
             return counters
+
+        # 2b. Register repos in config table (new repos default to active)
+        await _ensure_repos_in_config(db, repos)
 
         # 3. Iterate repos x members
         for repo_data in repos:

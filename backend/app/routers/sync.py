@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.rate_limit import check_rate_limit
 from app.redis_client import get_redis_client
 from app.services.github_service import GitHubService
 from app.services.plane_service import PlaneService
@@ -24,6 +25,7 @@ _STEP_TIMEOUT = 30
 @router.post("/sync")
 async def sync_cache() -> dict:
     """Clear all Plane and GitHub cache keys so the next request fetches fresh data."""
+    check_rate_limit("sync_cache")
     client = get_redis_client()
     deleted = 0
 
@@ -115,7 +117,7 @@ async def _sync_stream_generator(db: AsyncSession) -> AsyncGenerator[str, None]:
             )
         except httpx.HTTPError as exc:
             logger.exception("SSE sync — HTTP error clearing cache: %s", exc)
-            steps_results.append({"step": "clear_cache", "ok": False, "error": str(exc)})
+            steps_results.append({"step": "clear_cache", "ok": False, "error": "http_error"})
             yield _sse_event(
                 {
                     "step": "clear_cache",
@@ -126,12 +128,12 @@ async def _sync_stream_generator(db: AsyncSession) -> AsyncGenerator[str, None]:
             )
         except Exception as exc:
             logger.exception("SSE sync — unexpected error clearing cache: %s", exc)
-            steps_results.append({"step": "clear_cache", "ok": False, "error": str(exc)})
+            steps_results.append({"step": "clear_cache", "ok": False, "error": "unexpected"})
             yield _sse_event(
                 {
                     "step": "clear_cache",
                     "status": "error",
-                    "message": f"Error inesperado: {exc}",
+                    "message": "Error inesperado al procesar este paso",
                     "progress": 20,
                 }
             )
@@ -171,7 +173,7 @@ async def _sync_stream_generator(db: AsyncSession) -> AsyncGenerator[str, None]:
             )
         except httpx.HTTPError as exc:
             logger.exception("SSE sync — HTTP error fetching plane metrics: %s", exc)
-            steps_results.append({"step": "fetch_plane_metrics", "ok": False, "error": str(exc)})
+            steps_results.append({"step": "fetch_plane_metrics", "ok": False, "error": "http_error"})
             yield _sse_event(
                 {
                     "step": "fetch_plane_metrics",
@@ -182,12 +184,12 @@ async def _sync_stream_generator(db: AsyncSession) -> AsyncGenerator[str, None]:
             )
         except Exception as exc:
             logger.exception("SSE sync — unexpected error fetching plane metrics: %s", exc)
-            steps_results.append({"step": "fetch_plane_metrics", "ok": False, "error": str(exc)})
+            steps_results.append({"step": "fetch_plane_metrics", "ok": False, "error": "unexpected"})
             yield _sse_event(
                 {
                     "step": "fetch_plane_metrics",
                     "status": "error",
-                    "message": f"Error inesperado: {exc}",
+                    "message": "Error inesperado al procesar este paso",
                     "progress": 45,
                 }
             )
@@ -227,7 +229,7 @@ async def _sync_stream_generator(db: AsyncSession) -> AsyncGenerator[str, None]:
             )
         except httpx.HTTPError as exc:
             logger.exception("SSE sync — HTTP error fetching plane projects: %s", exc)
-            steps_results.append({"step": "fetch_plane_projects", "ok": False, "error": str(exc)})
+            steps_results.append({"step": "fetch_plane_projects", "ok": False, "error": "http_error"})
             yield _sse_event(
                 {
                     "step": "fetch_plane_projects",
@@ -238,12 +240,12 @@ async def _sync_stream_generator(db: AsyncSession) -> AsyncGenerator[str, None]:
             )
         except Exception as exc:
             logger.exception("SSE sync — unexpected error fetching plane projects: %s", exc)
-            steps_results.append({"step": "fetch_plane_projects", "ok": False, "error": str(exc)})
+            steps_results.append({"step": "fetch_plane_projects", "ok": False, "error": "unexpected"})
             yield _sse_event(
                 {
                     "step": "fetch_plane_projects",
                     "status": "error",
-                    "message": f"Error inesperado: {exc}",
+                    "message": "Error inesperado al procesar este paso",
                     "progress": 65,
                 }
             )
@@ -283,7 +285,7 @@ async def _sync_stream_generator(db: AsyncSession) -> AsyncGenerator[str, None]:
             )
         except httpx.HTTPError as exc:
             logger.exception("SSE sync — HTTP error fetching plane cycles: %s", exc)
-            steps_results.append({"step": "fetch_plane_cycles", "ok": False, "error": str(exc)})
+            steps_results.append({"step": "fetch_plane_cycles", "ok": False, "error": "http_error"})
             yield _sse_event(
                 {
                     "step": "fetch_plane_cycles",
@@ -294,12 +296,12 @@ async def _sync_stream_generator(db: AsyncSession) -> AsyncGenerator[str, None]:
             )
         except Exception as exc:
             logger.exception("SSE sync — unexpected error fetching plane cycles: %s", exc)
-            steps_results.append({"step": "fetch_plane_cycles", "ok": False, "error": str(exc)})
+            steps_results.append({"step": "fetch_plane_cycles", "ok": False, "error": "unexpected"})
             yield _sse_event(
                 {
                     "step": "fetch_plane_cycles",
                     "status": "error",
-                    "message": f"Error inesperado: {exc}",
+                    "message": "Error inesperado al procesar este paso",
                     "progress": 85,
                 }
             )
@@ -339,7 +341,7 @@ async def _sync_stream_generator(db: AsyncSession) -> AsyncGenerator[str, None]:
             )
         except httpx.HTTPError as exc:
             logger.exception("SSE sync — HTTP error fetching github metrics: %s", exc)
-            steps_results.append({"step": "fetch_github_metrics", "ok": False, "error": str(exc)})
+            steps_results.append({"step": "fetch_github_metrics", "ok": False, "error": "http_error"})
             yield _sse_event(
                 {
                     "step": "fetch_github_metrics",
@@ -350,12 +352,12 @@ async def _sync_stream_generator(db: AsyncSession) -> AsyncGenerator[str, None]:
             )
         except Exception as exc:
             logger.exception("SSE sync — unexpected error fetching github metrics: %s", exc)
-            steps_results.append({"step": "fetch_github_metrics", "ok": False, "error": str(exc)})
+            steps_results.append({"step": "fetch_github_metrics", "ok": False, "error": "unexpected"})
             yield _sse_event(
                 {
                     "step": "fetch_github_metrics",
                     "status": "error",
-                    "message": f"Error inesperado: {exc}",
+                    "message": "Error inesperado al procesar este paso",
                     "progress": 98,
                 }
             )
@@ -387,12 +389,15 @@ async def _sync_stream_generator(db: AsyncSession) -> AsyncGenerator[str, None]:
 async def sync_stream(db: AsyncSession = Depends(get_db)) -> StreamingResponse:
     """Stream synchronization progress via Server-Sent Events.
 
+    Rate-limited to one call per 30 seconds to prevent abuse.
+
     Executes 5 sequential steps: clear_cache, fetch_plane_metrics,
     fetch_plane_projects, fetch_plane_cycles, fetch_github_metrics.
     Each step emits at least two SSE events (in_progress + completed/error).
     Each step is bounded by _STEP_TIMEOUT seconds.
     A final event with type 'complete' summarises the run.
     """
+    check_rate_limit("sync_stream")
     return StreamingResponse(
         _sync_stream_generator(db),
         media_type="text/event-stream",

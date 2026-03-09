@@ -195,7 +195,14 @@ async def _upsert_work_item(
     title = item.get("name", item.get("title", ""))
     raw_priority = item.get("priority")
     priority = str(raw_priority) if raw_priority is not None else None
-    estimate_points = item.get("estimate_point")
+    raw_estimate = item.get("estimate_point")
+    estimate_points: int | None = None
+    if raw_estimate is not None:
+        try:
+            estimate_points = int(raw_estimate)
+        except (ValueError, TypeError):
+            # Plane may return a UUID reference instead of an integer
+            estimate_points = None
     label_names = labels if labels else None
 
     result = await db.execute(
