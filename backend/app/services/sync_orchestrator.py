@@ -17,12 +17,16 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.sync_log import SyncLog
+from app.redis_client import cache_delete, cache_set
 from app.services.sync_github import sync_github
 from app.services.sync_members import sync_members
 from app.services.sync_projects import sync_projects_and_cycles
 from app.services.sync_work_items import sync_work_items
 
 logger = logging.getLogger(__name__)
+
+SYNC_PROGRESS_KEY = "sync:progress"
+SYNC_PROGRESS_TTL = 3600  # 1h safety net
 
 SYNC_STEPS: list[dict[str, Any]] = [
     {"id": "members", "label": "Sincronizando miembros", "fn": sync_members},
@@ -48,6 +52,14 @@ DEFAULT_TIMEOUT = 300
 def _event(event_type: str, data: dict[str, Any]) -> dict[str, str]:
     """Build an SSE-compatible event dict."""
     return {"event": event_type, "data": json.dumps(data)}
+
+
+async def _update_redis_progress(state: dict[str, Any]) -> None:
+    """Persist current sync progress to Redis so polling clients can read it."""
+    try:
+        await cache_set(SYNC_PROGRESS_KEY, state, ttl=SYNC_PROGRESS_TTL)
+    except Exception as exc:
+        logger.warning("Failed to update sync progress in Redis: %s", exc)
 
 
 async def _safe_rollback(db: AsyncSession) -> None:
@@ -80,6 +92,20 @@ async def run_full_sync(db: AsyncSession) -> AsyncGenerator[dict[str, str], None
     results: dict[str, Any] = {}
     errors: list[dict[str, str]] = []
 
+    # Build initial Redis progress state
+    redis_steps = [
+        {"id": s["id"], "label": s["label"], "status": "pending"}
+        for s in SYNC_STEPS
+    ]
+    redis_state: dict[str, Any] = {
+        "sync_log_id": sync_log_id,
+        "status": "running",
+        "progress": 0,
+        "current_step": None,
+        "steps": redis_steps,
+    }
+    await _update_redis_progress(redis_state)
+
     yield _event(
         "sync_start",
         {
@@ -93,13 +119,22 @@ async def run_full_sync(db: AsyncSession) -> AsyncGenerator[dict[str, str], None
         step_label: str = step["label"]
         timeout = STEP_TIMEOUTS.get(step_id, DEFAULT_TIMEOUT)
 
+        # Update Redis: step starting
+        step_progress = int((i / total_steps) * 100)
+        for rs in redis_state["steps"]:
+            if rs["id"] == step_id:
+                rs["status"] = "running"
+        redis_state["current_step"] = step_id
+        redis_state["progress"] = step_progress
+        await _update_redis_progress(redis_state)
+
         yield _event(
             "step_start",
             {
                 "step": step_id,
                 "label": step_label,
                 "status": "running",
-                "progress": int((i / total_steps) * 100),
+                "progress": step_progress,
             },
         )
 
@@ -107,12 +142,23 @@ async def run_full_sync(db: AsyncSession) -> AsyncGenerator[dict[str, str], None
             result = await asyncio.wait_for(step["fn"](db), timeout=timeout)
             results[step_id] = result
 
+            completed_progress = int(((i + 1) / total_steps) * 100)
+
+            # Update Redis: step completed
+            records = result.get("synced", 0) if isinstance(result, dict) else 0
+            for rs in redis_state["steps"]:
+                if rs["id"] == step_id:
+                    rs["status"] = "completed"
+                    rs["records_synced"] = records
+            redis_state["progress"] = completed_progress
+            await _update_redis_progress(redis_state)
+
             yield _event(
                 "step_complete",
                 {
                     "step": step_id,
                     "status": "completed",
-                    "progress": int(((i + 1) / total_steps) * 100),
+                    "progress": completed_progress,
                     "result": result,
                 },
             )
@@ -123,12 +169,22 @@ async def run_full_sync(db: AsyncSession) -> AsyncGenerator[dict[str, str], None
             errors.append({"step": step_id, "error": error_msg})
             await _safe_rollback(db)
 
+            error_progress = int(((i + 1) / total_steps) * 100)
+
+            # Update Redis: step error
+            for rs in redis_state["steps"]:
+                if rs["id"] == step_id:
+                    rs["status"] = "error"
+                    rs["error"] = error_msg
+            redis_state["progress"] = error_progress
+            await _update_redis_progress(redis_state)
+
             yield _event(
                 "step_error",
                 {
                     "step": step_id,
                     "status": "error",
-                    "progress": int(((i + 1) / total_steps) * 100),
+                    "progress": error_progress,
                     "error": error_msg,
                 },
             )
@@ -143,12 +199,22 @@ async def run_full_sync(db: AsyncSession) -> AsyncGenerator[dict[str, str], None
             errors.append({"step": step_id, "error": "Error en sincronización"})
             await _safe_rollback(db)
 
+            error_progress = int(((i + 1) / total_steps) * 100)
+
+            # Update Redis: step error
+            for rs in redis_state["steps"]:
+                if rs["id"] == step_id:
+                    rs["status"] = "error"
+                    rs["error"] = "Error en sincronización"
+            redis_state["progress"] = error_progress
+            await _update_redis_progress(redis_state)
+
             yield _event(
                 "step_error",
                 {
                     "step": step_id,
                     "status": "error",
-                    "progress": int(((i + 1) / total_steps) * 100),
+                    "progress": error_progress,
                     # Generic message — do NOT expose internal exception details
                     "error": "Error en sincronización",
                 },
@@ -189,6 +255,9 @@ async def run_full_sync(db: AsyncSession) -> AsyncGenerator[dict[str, str], None
         final_status = "partial"
     else:
         final_status = "failed"
+
+    # Clean up Redis progress key now that sync is done
+    await cache_delete(SYNC_PROGRESS_KEY)
 
     yield _event(
         "sync_complete",

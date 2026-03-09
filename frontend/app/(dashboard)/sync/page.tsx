@@ -86,9 +86,25 @@ export default function SyncPage() {
   const { data, isLoading, error } = useSyncStatus();
   const sync = useSyncProgress();
 
-  const isSyncing = sync.isRunning;
+  // SSE is the primary source; polling is the fallback when SSE is idle
+  const pollingIsRunning = data?.is_running === true;
+  const sseIsActive = sync.isRunning;
+  const isSyncing = sseIsActive || pollingIsRunning;
   const isDone = sync.status === 'completed' || sync.status === 'error';
   const hasPartialErrors = sync.errors.length > 0 && sync.status === 'completed';
+
+  // When SSE is idle but polling says sync is running, use polling data
+  const usePollingFallback = !sseIsActive && !isDone && pollingIsRunning;
+  const displayProgress = usePollingFallback ? (data?.progress ?? 0) : sync.progress;
+  const displaySteps: SyncStep[] = usePollingFallback
+    ? (data?.steps ?? []).map((s) => ({
+        id: s.id,
+        label: s.label,
+        status: s.status as StepStatus,
+        records_synced: s.records_synced ?? undefined,
+        error: s.error ?? undefined,
+      }))
+    : sync.steps;
 
   if (isLoading && sync.status === 'idle') {
     return (
@@ -114,11 +130,15 @@ export default function SyncPage() {
       ? 'bg-blue-600'
       : 'bg-emerald-500';
 
+  const currentStepLabel = usePollingFallback && data?.current_step
+    ? displaySteps.find((s) => s.id === data.current_step)?.label ?? data.current_step
+    : null;
+
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-slate-900">Sincronización</h1>
-        {!isSyncing && (
+        {!isSyncing && !isDone && (
           <button
             onClick={() => sync.startSync()}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
@@ -142,28 +162,35 @@ export default function SyncPage() {
             {/* Progress bar */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs text-slate-500">Progreso general</span>
-                <span className="text-xs font-medium text-slate-700">{sync.progress}%</span>
+                <span className="text-xs text-slate-500">
+                  {usePollingFallback ? 'Progreso general (reconectando...)' : 'Progreso general'}
+                </span>
+                <span className="text-xs font-medium text-slate-700">{displayProgress}%</span>
               </div>
               <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all duration-500 ease-out ${progressBarColor}`}
-                  style={{ width: `${sync.progress}%` }}
+                  style={{ width: `${displayProgress}%` }}
                   role="progressbar"
-                  aria-valuenow={sync.progress}
+                  aria-valuenow={displayProgress}
                   aria-valuemin={0}
                   aria-valuemax={100}
                 />
               </div>
             </div>
 
+            {/* Current step hint for polling fallback */}
+            {usePollingFallback && currentStepLabel && (
+              <p className="text-xs text-blue-500">Paso actual: {currentStepLabel}</p>
+            )}
+
             {/* Steps */}
-            {sync.steps.length === 0 && isSyncing && (
+            {displaySteps.length === 0 && isSyncing && (
               <p className="text-sm text-slate-400 py-4 text-center">Iniciando sincronización...</p>
             )}
-            {sync.steps.length > 0 && (
+            {displaySteps.length > 0 && (
               <ul className="divide-y divide-slate-50" aria-label="Pasos de sincronización">
-                {sync.steps.map((step) => (
+                {displaySteps.map((step) => (
                   <SyncStepRow key={step.id} step={step} />
                 ))}
               </ul>

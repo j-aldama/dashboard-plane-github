@@ -13,8 +13,9 @@ from sse_starlette.sse import EventSourceResponse
 from app.database import get_db
 from app.models.sync_log import SyncLog
 from app.rate_limit import check_rate_limit
-from app.schemas.sync_status import LastSyncInfo, SyncStatusResponse
-from app.services.sync_orchestrator import run_full_sync
+from app.redis_client import cache_get
+from app.schemas.sync_status import LastSyncInfo, SyncStepStatus, SyncStatusResponse
+from app.services.sync_orchestrator import SYNC_PROGRESS_KEY, run_full_sync
 
 logger = logging.getLogger(__name__)
 
@@ -70,12 +71,35 @@ async def sync_status_endpoint(
             error_count=error_count,
         )
 
+    # When sync is running, read detailed progress from Redis
+    progress = 0
+    current_step = None
+    steps: list[SyncStepStatus] = []
+
+    if running_log is not None:
+        redis_progress = await cache_get(SYNC_PROGRESS_KEY)
+        if redis_progress and isinstance(redis_progress, dict):
+            progress = redis_progress.get("progress", 0)
+            current_step = redis_progress.get("current_step")
+            raw_steps = redis_progress.get("steps", [])
+            steps = [
+                SyncStepStatus(
+                    id=s.get("id", ""),
+                    label=s.get("label", ""),
+                    status=s.get("status", "pending"),
+                    records_synced=s.get("records_synced"),
+                    error=s.get("error"),
+                )
+                for s in raw_steps
+                if isinstance(s, dict)
+            ]
+
     return SyncStatusResponse(
         is_running=running_log is not None,
-        progress=0 if running_log else 100,
-        current_step=None,
+        progress=progress if running_log else 100,
+        current_step=current_step,
         started_at=running_log.started_at if running_log else None,
-        steps=[],
+        steps=steps,
         last_sync=last_sync,
     )
 
