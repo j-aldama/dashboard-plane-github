@@ -22,11 +22,10 @@ from app.models.work_item import WorkItem
 
 logger = logging.getLogger(__name__)
 
-# States considered "completed" — must match metrics_plane definition
-_COMPLETED_STATES = ("Done", "Cancelled")
-
-# States treated as backlog (not counted in active_workload)
-_BACKLOG_STATES = ("Backlog",)
+# State groups — must match metrics_plane definition
+_COMPLETED_GROUPS = ("completed",)
+_CANCELLED_GROUPS = ("cancelled",)
+_INACTIVE_GROUPS = ("completed", "cancelled", "backlog")
 
 
 def _to_utc_datetime(d: date | datetime | None) -> datetime | None:
@@ -119,13 +118,13 @@ async def get_comparative_metrics(
             select(
                 WorkItem.assignee_id,
                 func.count(
-                    case((WorkItem.state.in_(_COMPLETED_STATES), 1))
+                    case((WorkItem.state_group.in_(_COMPLETED_GROUPS), 1))
                 ).label("tasks_completed"),
                 func.coalesce(
                     func.sum(
                         case(
                             (
-                                WorkItem.state.in_(_COMPLETED_STATES),
+                                WorkItem.state_group.in_(_COMPLETED_GROUPS),
                                 WorkItem.estimate_points,
                             ),
                             else_=0,
@@ -137,9 +136,8 @@ async def get_comparative_metrics(
                     case(
                         (
                             and_(
-                                WorkItem.state.notin_(_COMPLETED_STATES),
-                                WorkItem.state.notin_(_BACKLOG_STATES),
-                                WorkItem.state.isnot(None),
+                                WorkItem.state_group.notin_(_INACTIVE_GROUPS),
+                                WorkItem.state_group.isnot(None),
                             ),
                             1,
                         )
@@ -167,7 +165,8 @@ async def get_comparative_metrics(
 
         overdue_conditions = [
             WorkItem.assignee_id.in_(member_ids),
-            WorkItem.state.notin_(_COMPLETED_STATES),
+            WorkItem.state_group.notin_(_INACTIVE_GROUPS),
+            WorkItem.state_group.isnot(None),
             Cycle.end_date < today,
         ]
         if project_id is not None:
