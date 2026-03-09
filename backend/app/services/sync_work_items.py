@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models.cycle import Cycle
 from app.models.project import Project
+from app.models.state import State
 from app.models.team_member import TeamMember
 from app.models.work_item import WorkItem
 
@@ -105,14 +106,23 @@ def _extract_state_name(item: dict[str, Any]) -> str:
     return ""
 
 
-def _parse_completed_at(item: dict[str, Any], state_name: str) -> datetime | None:
+def _parse_completed_at(
+    item: dict[str, Any],
+    state_name: str,
+    state_group: str | None = None,
+) -> datetime | None:
     """Calculate completed_at for issues in a completed state.
 
     Returns None if the state is not a completed state.  If the API
     provides a ``completed_at`` timestamp it is parsed; otherwise the
     current UTC time is used as a fallback.
     """
-    if state_name not in COMPLETED_STATES:
+    is_completed = (
+        state_group in ("completed", "cancelled")
+        if state_group
+        else state_name in COMPLETED_STATES
+    )
+    if not is_completed:
         return None
 
     raw = item.get("completed_at")
@@ -172,12 +182,23 @@ async def _build_cycle_lookup(db: AsyncSession) -> dict[str, int]:
     return {c.plane_cycle_id: c.id for c in cycles}
 
 
+async def _build_state_lookup(db: AsyncSession) -> dict[str, dict[str, str]]:
+    """Build plane_state_id -> {name, group} mapping."""
+    result = await db.execute(select(State))
+    states = result.scalars().all()
+    return {
+        s.plane_state_id: {"name": s.name, "group": s.group}
+        for s in states
+    }
+
+
 async def _upsert_work_item(
     db: AsyncSession,
     item: dict[str, Any],
     project: Project,
     member_lookup: dict[str, int],
     cycle_lookup: dict[str, int],
+    state_lookup: dict[str, dict[str, str]],
 ) -> bool:
     """Upsert a single work item.  Returns True if a new row was created."""
     plane_issue_id = str(item.get("id", ""))
@@ -188,14 +209,25 @@ async def _upsert_work_item(
     labels = _extract_labels(item)
     is_bug = _has_label_match(labels, BUG_LABEL_KEYWORDS)
     is_client_blocked = _has_label_match(labels, CLIENT_BLOCKED_LABEL_KEYWORDS)
-    state_name = _extract_state_name(item)
-    completed_at = _parse_completed_at(item, state_name)
+
+    # Resolve state UUID via local states table for accurate name + group
+    raw_state_id = str(item.get("state", ""))
+    state_info = state_lookup.get(raw_state_id)
+    if state_info:
+        state_name = state_info["name"]
+        state_group = state_info["group"]
+    else:
+        state_name = _extract_state_name(item)
+        state_group = None
+
+    completed_at = _parse_completed_at(item, state_name, state_group)
     assignee_id = _resolve_assignee(item, member_lookup)
     cycle_id = _resolve_cycle(item, cycle_lookup)
     title = item.get("name", item.get("title", ""))
     raw_priority = item.get("priority")
     priority = str(raw_priority) if raw_priority is not None else None
-    raw_estimate = item.get("estimate_point")
+    # Plane exposes points via "point" (preferred) and "estimate_point" (legacy)
+    raw_estimate = item.get("point") or item.get("estimate_point")
     estimate_points: int | None = None
     if raw_estimate is not None:
         try:
@@ -220,6 +252,7 @@ async def _upsert_work_item(
 
     work_item.title = title
     work_item.state = state_name
+    work_item.state_group = state_group
     work_item.priority = priority
     work_item.estimate_points = estimate_points
     work_item.label_names = label_names
@@ -258,6 +291,7 @@ async def sync_work_items(db: AsyncSession) -> dict[str, int]:
 
     member_lookup = await _build_member_lookup(db)
     cycle_lookup = await _build_cycle_lookup(db)
+    state_lookup = await _build_state_lookup(db)
 
     created_count = 0
     updated_count = 0
@@ -301,7 +335,7 @@ async def sync_work_items(db: AsyncSession) -> dict[str, int]:
             for item in items:
                 try:
                     was_created = await _upsert_work_item(
-                        db, item, project, member_lookup, cycle_lookup
+                        db, item, project, member_lookup, cycle_lookup, state_lookup
                     )
                     if was_created:
                         created_count += 1
