@@ -229,6 +229,7 @@ from app.models.cycle import Cycle  # noqa: E402
 from app.models.github_commit import GitHubCommit  # noqa: E402
 from app.models.github_pull_request import GitHubPullRequest  # noqa: E402
 from app.models.project import Project  # noqa: E402
+from app.models.state import State  # noqa: E402
 from app.models.sync_log import SyncLog  # noqa: E402
 from app.models.sync_schedule import SyncSchedule  # noqa: E402
 from app.models.team_member import TeamMember  # noqa: E402
