@@ -69,13 +69,21 @@ class _TestSettings(BaseSettings):
     GITHUB_TOKEN: str = ""
     GITHUB_ORG: str = ""
 
-    CORS_ORIGINS: list[str] = ["http://localhost:3000"]
+    REDIS_URL: str = "redis://localhost:6379"
 
-    @field_validator("CORS_ORIGINS", mode="before")
+    API_KEY: str = ""
+
+    CORS_ORIGINS: list[str] = ["http://localhost:3000"]
+    CORS_METHODS: list[str] = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
+    CORS_HEADERS: list[str] = ["Content-Type", "X-API-Key"]
+
+    DOCS_ENABLED: bool = True
+
+    @field_validator("CORS_ORIGINS", "CORS_METHODS", "CORS_HEADERS", mode="before")
     @classmethod
-    def parse_cors_origins(cls, v: object) -> object:
+    def parse_comma_list(cls, v: object) -> object:
         if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",") if origin.strip()]
+            return [item.strip() for item in v.split(",") if item.strip()]
         return v
 
 
@@ -386,6 +394,16 @@ async def create_cycle(
     return cycle
 
 
+_STATE_TO_GROUP: dict[str | None, str | None] = {
+    "Done": "completed",
+    "Cancelled": "cancelled",
+    "Backlog": "backlog",
+    "In Progress": "started",
+    "Todo": "unstarted",
+    None: None,
+}
+
+
 async def create_work_item(
     db: AsyncSession,
     project: Project,
@@ -393,6 +411,7 @@ async def create_work_item(
     plane_issue_id: str = "plane-issue-001",
     title: str = "Test Task",
     state: str | None = "In Progress",
+    state_group: str | None = None,
     priority: str | None = "high",
     estimate_points: int | None = 3,
     label_names: list | None = None,
@@ -402,6 +421,8 @@ async def create_work_item(
     cycle: Cycle | None = None,
     completed_at: datetime | None = None,
 ) -> WorkItem:
+    # Derive state_group from state when not explicitly provided
+    resolved_group = state_group if state_group is not None else _STATE_TO_GROUP.get(state)
     work_item = WorkItem(
         project_id=project.id,
         cycle_id=cycle.id if cycle else None,
@@ -409,6 +430,7 @@ async def create_work_item(
         plane_issue_id=plane_issue_id,
         title=title,
         state=state,
+        state_group=resolved_group,
         priority=priority,
         estimate_points=estimate_points,
         label_names=label_names,
