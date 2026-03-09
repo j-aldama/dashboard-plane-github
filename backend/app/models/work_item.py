@@ -33,6 +33,7 @@ class WorkItem(Base, TimestampMixin):
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     state: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    state_group: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     priority: Mapped[str | None] = mapped_column(String(50), nullable=True)
     estimate_points: Mapped[int | None] = mapped_column(Integer, nullable=True)
     label_names: Mapped[Any | None] = mapped_column(JSON, nullable=True)
