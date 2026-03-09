@@ -24,11 +24,12 @@ logging.config.dictConfig({
     },
 })
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
+from app.auth import require_api_key
 from app.config import settings
 from app.database import engine
 from app.routers import health
@@ -73,18 +74,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await engine.dispose()
 
 
+_docs_kwargs: dict = {}
+if not settings.DOCS_ENABLED:
+    _docs_kwargs = {"docs_url": None, "redoc_url": None, "openapi_url": None}
+
 app = FastAPI(
     title="Dashboard de Productividad API",
     version="0.1.0",
     lifespan=lifespan,
+    dependencies=[Depends(require_api_key)],
+    **_docs_kwargs,
 )
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=settings.CORS_METHODS,
+    allow_headers=settings.CORS_HEADERS,
 )
 
 

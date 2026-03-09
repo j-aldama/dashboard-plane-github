@@ -19,13 +19,21 @@ class Settings(BaseSettings):
     GITHUB_TOKEN: str = ""
     GITHUB_ORG: str = ""
 
-    CORS_ORIGINS: List[str] = ["http://localhost:3000"]
+    REDIS_URL: str = "redis://localhost:6379"
 
-    @field_validator("CORS_ORIGINS", mode="before")
+    API_KEY: str = ""
+
+    CORS_ORIGINS: List[str] = ["http://localhost:3000"]
+    CORS_METHODS: List[str] = ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
+    CORS_HEADERS: List[str] = ["Content-Type", "X-API-Key"]
+
+    DOCS_ENABLED: bool = True
+
+    @field_validator("CORS_ORIGINS", "CORS_METHODS", "CORS_HEADERS", mode="before")
     @classmethod
-    def parse_cors_origins(cls, v: object) -> object:
+    def parse_comma_list(cls, v: object) -> object:
         if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",") if origin.strip()]
+            return [item.strip() for item in v.split(",") if item.strip()]
         return v
 
 

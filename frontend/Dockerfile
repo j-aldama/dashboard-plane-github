@@ -3,8 +3,8 @@ FROM node:20-alpine AS deps
 
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install --frozen-lockfile 2>/dev/null || npm install
+COPY package.json package-lock.json ./
+RUN npm ci --legacy-peer-deps
 
 # ── Stage 2: build the Next.js application ────────────────────────────────────
 FROM node:20-alpine AS builder
@@ -18,6 +18,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 ARG NEXT_PUBLIC_API_URL=http://localhost:8080
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+
+ARG INTERNAL_API_URL=http://api:8000
+ENV INTERNAL_API_URL=${INTERNAL_API_URL}
 
 RUN npm run build
 

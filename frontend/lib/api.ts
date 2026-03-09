@@ -1,4 +1,13 @@
 const BASE_URL = '/api';
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY ?? '';
+
+function getHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (API_KEY) {
+    headers['X-API-Key'] = API_KEY;
+  }
+  return headers;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -38,7 +47,7 @@ export async function apiGet<T>(path: string, params?: Record<string, string>): 
 
   const response = await fetch(url.toString(), {
     method: 'GET',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getHeaders(),
   });
 
   return handleResponse<T>(response);
@@ -47,7 +56,7 @@ export async function apiGet<T>(path: string, params?: Record<string, string>): 
 export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getHeaders(),
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
@@ -57,7 +66,7 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
 export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getHeaders(),
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
@@ -67,7 +76,7 @@ export async function apiPatch<T>(path: string, body?: unknown): Promise<T> {
 export async function apiPut<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getHeaders(),
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 

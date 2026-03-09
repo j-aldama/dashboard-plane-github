@@ -18,15 +18,15 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_USER: ${POSTGRES_USER:-dashboard_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_pg_2024}
       POSTGRES_DB: ${POSTGRES_DB:-dashboard_ralph}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - dashboard-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-dashboard_ralph}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dashboard_admin} -d ${POSTGRES_DB:-dashboard_ralph}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -36,13 +36,13 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: redis-server --save 60 1 --loglevel warning
+    command: redis-server --save 60 1 --loglevel warning --requirepass ${REDIS_PASSWORD:-changeme_redis_2024}
     volumes:
       - redis_data:/data
     networks:
       - dashboard-net
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme_redis_2024}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -57,11 +57,13 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-dashboard_ralph}
-      REDIS_URL: redis://redis:6379
-      ALLOWED_ORIGINS: http://localhost:3000,http://localhost:3030
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-dashboard_admin}:${POSTGRES_PASSWORD:-changeme_pg_2024}@db:5432/${POSTGRES_DB:-dashboard_ralph}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme_redis_2024}@redis:6379
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3030}
+      API_KEY: ${API_KEY:-}
+      DOCS_ENABLED: ${DOCS_ENABLED:-true}
     ports:
-      - "${API_PORT:-8000}:8000"
+      - "127.0.0.1:${API_PORT:-8000}:8000"
     networks:
       - dashboard-net
     depends_on:
@@ -70,7 +72,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -88,9 +90,10 @@ services:
       - .env
     environment:
       NEXT_PUBLIC_API_URL: http://api:8000
+      NEXT_PUBLIC_API_KEY: ${API_KEY:-}
       PORT: "3000"
     ports:
-      - "${PORT:-3000}:3000"
+      - "127.0.0.1:${PORT:-3000}:3000"
     networks:
       - dashboard-net
     depends_on:
