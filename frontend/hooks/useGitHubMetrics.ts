@@ -10,9 +10,9 @@ import { useFilters, buildApiParams } from '@/hooks/useFilters';
 export interface GitHubOverview {
   total_commits: number;
   total_prs: number;
-  prs_merged: number;
-  lines_added: number;
-  lines_removed: number;
+  total_prs_merged: number;
+  total_lines_added: number;
+  total_lines_removed: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -33,9 +33,10 @@ export interface GitHubActivity {
 // ---------------------------------------------------------------------------
 
 export interface RepoMetrics {
-  repo: string;
+  repo_name: string;
   commits: number;
-  pull_requests: number;
+  prs: number;
+  prs_merged: number;
   lines_added: number;
   lines_removed: number;
 }
@@ -49,11 +50,11 @@ export interface GitHubByRepo {
 // ---------------------------------------------------------------------------
 
 export interface UserMetrics {
-  user_id: string;
-  display_name: string;
+  user_id: number;
+  name: string;
   github_username: string | null;
   commits: number;
-  pull_requests: number;
+  prs: number;
   prs_merged: number;
   lines_added: number;
   lines_removed: number;

@@ -20,7 +20,7 @@ export function ChartContainer({
   loading = false,
 }: ChartContainerProps) {
   if (loading) {
-    return <Skeleton variant="chart" />;
+    return <Skeleton className="h-[280px] w-full rounded-xl" />;
   }
 
   return (

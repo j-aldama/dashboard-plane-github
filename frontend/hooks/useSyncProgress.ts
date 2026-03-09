@@ -23,13 +23,10 @@ export interface SyncResults {
 }
 
 const STEP_LABELS: Record<string, string> = {
-  plane_projects: 'Sincronizando proyectos de Plane',
-  plane_issues: 'Sincronizando issues de Plane',
-  plane_cycles: 'Sincronizando ciclos de Plane',
-  github_repos: 'Sincronizando repositorios de GitHub',
-  github_prs: 'Sincronizando pull requests de GitHub',
-  github_commits: 'Sincronizando commits de GitHub',
-  compute_metrics: 'Calculando métricas',
+  members: 'Sincronizando miembros',
+  projects: 'Sincronizando proyectos y ciclos',
+  work_items: 'Sincronizando tareas',
+  github: 'Sincronizando GitHub',
 };
 
 function getStepLabel(stepId: string): string {
@@ -95,9 +92,18 @@ export function useSyncProgress() {
     abortControllerRef.current = new AbortController();
 
     try {
-      const response = await fetch('/api/sync/all', {
+      const apiKey = process.env.NEXT_PUBLIC_API_KEY ?? '';
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (apiKey) {
+        headers['X-API-Key'] = apiKey;
+      }
+
+      // Call backend directly — Next.js rewrites buffer SSE responses,
+      // preventing real-time streaming updates.
+      const directApi = process.env.NEXT_PUBLIC_API_URL ?? '';
+      const response = await fetch(`${directApi}/api/sync/all`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         signal: abortControllerRef.current.signal,
       });
 
@@ -121,7 +127,7 @@ export function useSyncProgress() {
         const { done, value } = await reader.read();
         if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
+        buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
 
         const lastDoubleNewline = buffer.lastIndexOf('\n\n');
         if (lastDoubleNewline === -1) continue;
@@ -185,15 +191,18 @@ export function useSyncProgress() {
             });
             setErrors((prev) => [...prev, `${getStepLabel(stepId)}: ${errMsg}`]);
           } else if (event === 'sync_complete') {
+            const errs = (payload.errors as Array<{ step: string; error: string }>) ?? [];
+            const resultsObj = payload.results as Record<string, unknown> | undefined;
+            const totalSteps = (resultsObj ? Object.keys(resultsObj).length : 0) + errs.length;
             const syncResults: SyncResults = {
-              total_steps: (payload.total_steps as number) ?? 0,
-              completed_steps: (payload.completed_steps as number) ?? 0,
-              failed_steps: (payload.failed_steps as number) ?? 0,
-              duration_seconds: payload.duration_seconds as number | undefined,
+              total_steps: totalSteps,
+              completed_steps: totalSteps - errs.length,
+              failed_steps: errs.length,
+              duration_seconds: undefined,
             };
             setResults(syncResults);
             setProgress(100);
-            setStatus('completed');
+            setStatus(errs.length === totalSteps && totalSteps > 0 ? 'error' : 'completed');
 
             await queryClient.invalidateQueries();
           }

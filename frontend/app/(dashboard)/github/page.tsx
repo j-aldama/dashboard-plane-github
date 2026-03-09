@@ -38,7 +38,7 @@ type UserRow = Record<string, unknown> & UserMetrics;
 
 const repoColumns: TableColumn<RepoRow>[] = [
   {
-    key: 'repo',
+    key: 'repo_name',
     label: 'Repositorio',
     sortable: true,
     render: (value) => (
@@ -54,7 +54,7 @@ const repoColumns: TableColumn<RepoRow>[] = [
     ),
   },
   {
-    key: 'pull_requests',
+    key: 'prs',
     label: 'PRs',
     sortable: true,
   },
@@ -78,7 +78,7 @@ const repoColumns: TableColumn<RepoRow>[] = [
 
 const userColumns: TableColumn<UserRow>[] = [
   {
-    key: 'display_name',
+    key: 'name',
     label: 'Persona',
     sortable: true,
     render: (value, row) => (
@@ -101,7 +101,7 @@ const userColumns: TableColumn<UserRow>[] = [
     ),
   },
   {
-    key: 'pull_requests',
+    key: 'prs',
     label: 'PRs',
     sortable: true,
   },
@@ -181,7 +181,7 @@ export default function GitHubPage() {
 
   // Data for bar chart: commits por persona
   const commitsPerPersonData = users.map((u) => ({
-    name: String(u.display_name),
+    name: String(u.name),
     Commits: u.commits as number,
   }));
 
@@ -217,15 +217,15 @@ export default function GitHubPage() {
             />
             <MetricCard
               title="PRs Merged"
-              value={overview?.prs_merged ?? 0}
+              value={overview?.total_prs_merged ?? 0}
             />
             <MetricCard
               title="Líneas Añadidas"
-              value={overview?.lines_added ?? 0}
+              value={overview?.total_lines_added ?? 0}
             />
             <MetricCard
               title="Líneas Eliminadas"
-              value={overview?.lines_removed ?? 0}
+              value={overview?.total_lines_removed ?? 0}
             />
           </div>
         )}

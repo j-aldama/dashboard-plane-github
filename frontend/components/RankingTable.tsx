@@ -44,7 +44,7 @@ export function RankingTable({
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   if (loading) {
-    return <Skeleton variant="table" lines={5} />;
+    return <Skeleton count={5} className="h-8 w-full rounded" />;
   }
 
   function handleSort(key: string) {
