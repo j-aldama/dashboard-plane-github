@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.cycle import Cycle
 from app.models.github_commit import GitHubCommit
 from app.models.github_pull_request import GitHubPullRequest
+from app.models.github_repository import GitHubRepository
 from app.models.project import Project
 from app.models.team_member import TeamMember
 from app.models.work_item import WorkItem
@@ -207,8 +208,18 @@ async def get_person_github(
         if dt_to is not None:
             dt_to = dt_to.replace(hour=23, minute=59, second=59, microsecond=999999)
 
+        # --- Exclude inactive repos ---
+        excl_result = await db.execute(
+            select(GitHubRepository.repo_name).where(
+                GitHubRepository.is_active.is_(False)
+            )
+        )
+        excluded_repos = {row[0] for row in excl_result.all()}
+
         # --- Commit aggregates ---
         commit_conditions: list = [GitHubCommit.team_member_id == user_id]
+        if excluded_repos:
+            commit_conditions.append(GitHubCommit.repo_name.notin_(excluded_repos))
         if dt_from is not None:
             commit_conditions.append(GitHubCommit.committed_at >= dt_from)
         if dt_to is not None:
@@ -224,6 +235,8 @@ async def get_person_github(
 
         # --- PR aggregates ---
         pr_conditions: list = [GitHubPullRequest.team_member_id == user_id]
+        if excluded_repos:
+            pr_conditions.append(GitHubPullRequest.repo_name.notin_(excluded_repos))
         if dt_from is not None:
             pr_conditions.append(GitHubPullRequest.created_at >= dt_from)
         if dt_to is not None:
@@ -241,15 +254,18 @@ async def get_person_github(
         # --- Weekly commits (last 3 months) ---
         three_months_ago = datetime.now(timezone.utc) - timedelta(days=90)
         week_trunc = func.date_trunc("week", GitHubCommit.committed_at).label("week")
+        weekly_conditions = [
+            GitHubCommit.team_member_id == user_id,
+            GitHubCommit.committed_at >= three_months_ago,
+        ]
+        if excluded_repos:
+            weekly_conditions.append(GitHubCommit.repo_name.notin_(excluded_repos))
         weekly_stmt = (
             select(
                 week_trunc,
                 func.count(GitHubCommit.id).label("commits"),
             )
-            .where(
-                GitHubCommit.team_member_id == user_id,
-                GitHubCommit.committed_at >= three_months_ago,
-            )
+            .where(and_(*weekly_conditions))
             .group_by(week_trunc)
             .order_by(week_trunc)
         )
@@ -263,6 +279,9 @@ async def get_person_github(
         ]
 
         # --- Recent PRs (10 most recent) ---
+        recent_pr_conditions = [GitHubPullRequest.team_member_id == user_id]
+        if excluded_repos:
+            recent_pr_conditions.append(GitHubPullRequest.repo_name.notin_(excluded_repos))
         recent_pr_stmt = (
             select(
                 GitHubPullRequest.id,
@@ -273,7 +292,7 @@ async def get_person_github(
                 GitHubPullRequest.created_at,
                 GitHubPullRequest.pr_number,
             )
-            .where(GitHubPullRequest.team_member_id == user_id)
+            .where(and_(*recent_pr_conditions))
             .order_by(GitHubPullRequest.created_at.desc())
             .limit(10)
         )

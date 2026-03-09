@@ -180,9 +180,12 @@ async def get_github_by_user(
     if not all_user_ids:
         return []
 
-    # Fetch TeamMember details for the relevant IDs
+    # Fetch active TeamMember details for the relevant IDs
     members_result = await db.execute(
-        select(TeamMember).where(TeamMember.id.in_(all_user_ids))
+        select(TeamMember).where(
+            TeamMember.id.in_(all_user_ids),
+            TeamMember.is_active.is_(True),
+        )
     )
     members = {m.id: m for m in members_result.scalars().all()}
 

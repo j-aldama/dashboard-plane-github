@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.cycle import Cycle
 from app.models.github_commit import GitHubCommit
 from app.models.github_pull_request import GitHubPullRequest
+from app.models.github_repository import GitHubRepository
 from app.models.team_member import TeamMember
 from app.models.work_item import WorkItem
 
@@ -81,9 +82,11 @@ async def get_comparative_metrics(
     Members with no activity are included with all metrics set to zero.
     """
     try:
-        # Fetch all team members so that members with zero activity appear too
+        # Fetch active team members so that members with zero activity appear too
         members_result = await db.execute(
-            select(TeamMember).order_by(TeamMember.name)
+            select(TeamMember)
+            .where(TeamMember.is_active.is_(True))
+            .order_by(TeamMember.name)
         )
         members: list[TeamMember] = list(members_result.scalars().all())
 
@@ -190,10 +193,23 @@ async def get_comparative_metrics(
         }
 
         # ------------------------------------------------------------------
+        # GitHub: exclude inactive repos
+        # ------------------------------------------------------------------
+
+        excluded_repo_result = await db.execute(
+            select(GitHubRepository.repo_name).where(
+                GitHubRepository.is_active.is_(False)
+            )
+        )
+        excluded_repos = {row[0] for row in excluded_repo_result.all()}
+
+        # ------------------------------------------------------------------
         # GitHub commits
         # ------------------------------------------------------------------
 
         commit_conditions: list = [GitHubCommit.team_member_id.in_(member_ids)]
+        if excluded_repos:
+            commit_conditions.append(GitHubCommit.repo_name.notin_(excluded_repos))
         if dt_from is not None:
             commit_conditions.append(GitHubCommit.committed_at >= dt_from)
         if dt_to is not None:
@@ -225,6 +241,8 @@ async def get_comparative_metrics(
         # ------------------------------------------------------------------
 
         pr_conditions: list = [GitHubPullRequest.team_member_id.in_(member_ids)]
+        if excluded_repos:
+            pr_conditions.append(GitHubPullRequest.repo_name.notin_(excluded_repos))
         if dt_from is not None:
             pr_conditions.append(GitHubPullRequest.created_at >= dt_from)
         if dt_to is not None:
