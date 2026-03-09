@@ -8,9 +8,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.github_commit import GitHubCommit
 from app.models.github_pull_request import GitHubPullRequest
+from app.models.github_repository import GitHubRepository
 from app.models.team_member import TeamMember
 
 logger = logging.getLogger(__name__)
+
+
+async def _get_excluded_repo_names(db: AsyncSession) -> set[str]:
+    """Return repo names explicitly marked as inactive (is_active=False)."""
+    result = await db.execute(
+        select(GitHubRepository.repo_name).where(
+            GitHubRepository.is_active.is_(False)
+        )
+    )
+    return {row[0] for row in result.all()}
 
 
 def _to_utc_datetime(d: date | datetime | None) -> datetime | None:
@@ -38,12 +49,16 @@ async def get_github_overview(
     if dt_to is not None:
         dt_to = dt_to.replace(hour=23, minute=59, second=59, microsecond=999999)
 
+    excluded_repos = await _get_excluded_repo_names(db)
+
     # --- Commits aggregate ---
     commit_query = select(
         func.count(GitHubCommit.id).label("total_commits"),
         func.coalesce(func.sum(GitHubCommit.lines_added), 0).label("total_lines_added"),
         func.coalesce(func.sum(GitHubCommit.lines_removed), 0).label("total_lines_removed"),
     )
+    if excluded_repos:
+        commit_query = commit_query.where(GitHubCommit.repo_name.notin_(excluded_repos))
     if user_id is not None:
         commit_query = commit_query.where(GitHubCommit.team_member_id == user_id)
     if repo_name is not None:
@@ -63,6 +78,8 @@ async def get_github_overview(
             case((GitHubPullRequest.merged_at.isnot(None), 1))
         ).label("total_prs_merged"),
     )
+    if excluded_repos:
+        pr_query = pr_query.where(GitHubPullRequest.repo_name.notin_(excluded_repos))
     if user_id is not None:
         pr_query = pr_query.where(GitHubPullRequest.team_member_id == user_id)
     if repo_name is not None:
@@ -96,6 +113,8 @@ async def get_github_by_user(
     if dt_to is not None:
         dt_to = dt_to.replace(hour=23, minute=59, second=59, microsecond=999999)
 
+    excluded_repos = await _get_excluded_repo_names(db)
+
     # Commits per user
     commit_query = (
         select(
@@ -106,6 +125,8 @@ async def get_github_by_user(
         )
         .group_by(GitHubCommit.team_member_id)
     )
+    if excluded_repos:
+        commit_query = commit_query.where(GitHubCommit.repo_name.notin_(excluded_repos))
     if repo_name is not None:
         commit_query = commit_query.where(GitHubCommit.repo_name == repo_name)
     if dt_from is not None:
@@ -135,6 +156,8 @@ async def get_github_by_user(
         )
         .group_by(GitHubPullRequest.team_member_id)
     )
+    if excluded_repos:
+        pr_query = pr_query.where(GitHubPullRequest.repo_name.notin_(excluded_repos))
     if repo_name is not None:
         pr_query = pr_query.where(GitHubPullRequest.repo_name == repo_name)
     if dt_from is not None:
@@ -152,8 +175,8 @@ async def get_github_by_user(
         for row in pr_rows
     }
 
-    # Gather all user IDs that appear in either map
-    all_user_ids = set(commit_map.keys()) | set(pr_map.keys())
+    # Gather all user IDs that appear in either map (exclude NULL team_member_id)
+    all_user_ids = (set(commit_map.keys()) | set(pr_map.keys())) - {None}
     if not all_user_ids:
         return []
 
@@ -199,6 +222,8 @@ async def get_github_by_repo(
     if dt_to is not None:
         dt_to = dt_to.replace(hour=23, minute=59, second=59, microsecond=999999)
 
+    excluded_repos = await _get_excluded_repo_names(db)
+
     # Commits per repo
     commit_query = (
         select(
@@ -209,6 +234,8 @@ async def get_github_by_repo(
         )
         .group_by(GitHubCommit.repo_name)
     )
+    if excluded_repos:
+        commit_query = commit_query.where(GitHubCommit.repo_name.notin_(excluded_repos))
     if user_id is not None:
         commit_query = commit_query.where(GitHubCommit.team_member_id == user_id)
     if dt_from is not None:
@@ -238,6 +265,8 @@ async def get_github_by_repo(
         )
         .group_by(GitHubPullRequest.repo_name)
     )
+    if excluded_repos:
+        pr_query = pr_query.where(GitHubPullRequest.repo_name.notin_(excluded_repos))
     if user_id is not None:
         pr_query = pr_query.where(GitHubPullRequest.team_member_id == user_id)
     if dt_from is not None:
@@ -319,6 +348,8 @@ async def get_github_activity(
     if dt_to is not None:
         dt_to = dt_to.replace(hour=23, minute=59, second=59, microsecond=999999)
 
+    excluded_repos = await _get_excluded_repo_names(db)
+
     trunc_unit = "week" if group_by == "weekly" else "day"
 
     # --- Commits grouped by period ---
@@ -333,6 +364,8 @@ async def get_github_activity(
         .group_by(commit_period)
         .order_by(commit_period)
     )
+    if excluded_repos:
+        commit_query = commit_query.where(GitHubCommit.repo_name.notin_(excluded_repos))
     if user_id is not None:
         commit_query = commit_query.where(GitHubCommit.team_member_id == user_id)
     if repo_name is not None:
@@ -355,6 +388,8 @@ async def get_github_activity(
         .group_by(pr_period)
         .order_by(pr_period)
     )
+    if excluded_repos:
+        pr_query = pr_query.where(GitHubPullRequest.repo_name.notin_(excluded_repos))
     if user_id is not None:
         pr_query = pr_query.where(GitHubPullRequest.team_member_id == user_id)
     if repo_name is not None:
