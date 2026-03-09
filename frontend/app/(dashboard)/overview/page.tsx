@@ -7,6 +7,7 @@ import { DataTable, TableColumn } from '@/components/DataTable';
 import { MetricCardSkeleton, TableSkeleton } from '@/components/Skeleton';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useOverviewMetrics, useProjectsMetrics, ProjectMetrics } from '@/hooks/useOverviewData';
+import { BlockedTasks } from '@/components/BlockedTasks';
 
 type ProjectRow = Record<string, unknown> & {
   id: number;
@@ -238,6 +239,9 @@ export default function OverviewPage() {
           </ResponsiveContainer>
         )}
       </section>
+
+      {/* Blocked Tasks */}
+      <BlockedTasks />
 
       {/* Projects Table */}
       <section>

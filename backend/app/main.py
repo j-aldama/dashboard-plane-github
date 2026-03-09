@@ -47,6 +47,7 @@ from app.routers import sync_schedule
 from app.routers import team_members
 from app.routers import github_repositories
 from app.routers import projects
+from app.routers import blocked_tasks
 from app.database import AsyncSessionLocal
 from app.services.scheduler import start_scheduler, stop_scheduler
 
@@ -125,3 +126,4 @@ app.include_router(sync_schedule.router, prefix="/api")
 app.include_router(team_members.router, prefix="/api")
 app.include_router(github_repositories.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
+app.include_router(blocked_tasks.router, prefix="/api")
